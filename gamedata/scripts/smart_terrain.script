@@ -1079,7 +1079,7 @@ end
 
 -- установить логику и сообщить смарту, что объект перешёл в онлайн.
 -- вызывается из net_spawn() объектов
-function setup_gulag_and_logic_on_spawn(obj, st, sobject, stype, loaded)
+function setup_gulag_and_logic_on_spawn(obj, st, se_abstract, stype, loaded)
 	local sim = alife()
 	local sobject = alife():object(obj:id())
 	if sim ~= nil and sobject then

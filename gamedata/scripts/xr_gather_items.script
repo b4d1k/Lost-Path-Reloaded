@@ -20,8 +20,8 @@ end
 function add_to_binder(object, ini, scheme, section, storage)
 	local manager = object:motivation_action_manager()
 
-	manager:remove_evaluator(stalker_ids.property_items)
-	manager:add_evaluator(stalker_ids.property_items, this.evaluator_gather_items("is_there_items_to_pickup", storage, object))
+	--manager:remove_evaluator(stalker_ids.property_items)
+	--manager:add_evaluator(stalker_ids.property_items, this.evaluator_gather_items("is_there_items_to_pickup", storage, object))
 end
 function set_gather_items(npc, ini, scheme, section)
 	local st = xr_logic.assign_storage_and_bind(npc, ini, scheme, section)

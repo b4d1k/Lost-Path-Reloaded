@@ -1267,6 +1267,10 @@ function pstor_store(obj, varname, val)
 end
 
 function pstor_retrieve(obj, varname, defval)
+	if not (obj) then 
+		callstack()
+	end 
+	
 	local npc_id = obj:id()
 
 	if db.storage[npc_id].pstor ~= nil then
