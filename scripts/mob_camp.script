@@ -123,7 +123,7 @@ function mob_camp:select_current_home_point(first_call)
 		for i = 1, self.home_path:count() do
 			if	(db.camp_storage[self.st.home_point][i] == nil) or 
 				(db.camp_storage[self.st.home_point][i] == false) then
-				table.insert(free_points, i)
+				free_points[#free_points+1] = i
 			end
 		end
 

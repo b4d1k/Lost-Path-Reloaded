@@ -8,9 +8,9 @@ end
 --------------------------------------------------------------------------------
 class "door_binder_labx8" (object_binder)
 function door_binder_labx8:__init(obj) super(obj)
-
+	local section = "animated_object"
 	local spawn_ini = obj:spawn_ini()
-	local filename = spawn_ini and spawn_ini:r_string_ex("animated_object","cfg")
+	local filename = spawn_ini and spawn_ini:r_string_ex(section,"cfg")
 	if not filename then
 		printf( "[animated object %s] no animated_object section in spawn ini!", obj:name() )
 		return
@@ -22,16 +22,14 @@ function door_binder_labx8:__init(obj) super(obj)
 		return	
 	end
 	
-	
-
 --	self.idle = 5000
 	self.is_idle = true
 	self.is_play_fwd = false
 --	self.idle_end = 0
 
-	local idle_snd 	= ini:r_string_ex("animated_object","idle_snd") or "device\\airtight_door_idle"
-	local start_snd = ini:r_string_ex("animated_object","start_snd") or "device\\airtight_door_start"
-	local stop_snd 	= ini:r_string_ex("animated_object","stop_snd") or "device\\airtight_door_stop"
+	local idle_snd 	= ini:r_string_ex(section,"idle_snd") or "device\\airtight_door_idle"
+	local start_snd = ini:r_string_ex(section,"start_snd") or "device\\airtight_door_start"
+	local stop_snd 	= ini:r_string_ex(section,"stop_snd") or "device\\airtight_door_stop"
 
 	if idle_snd ~= nil and idle_snd ~= "nil" then
 		self.idle_snd 	= 	sound_object(idle_snd)
@@ -43,36 +41,20 @@ function door_binder_labx8:__init(obj) super(obj)
 		self.stop_snd 	= 	sound_object(stop_snd)
 	end
 	
- 	self.tip		= xr_logic.parse_condlist(nil, "door_binder_labx8", "tip_condlist", ini:r_string_ex("animated_object","tip") or "none")
+ 	self.tip = ini:r_string_to_condlist(section,"tip")
+	self.on_use = ini:r_string_to_condlist(section,"on_use")
+	self.on_start = ini:r_string_to_condlist(section,"on_start")
+	self.on_stop = ini:r_string_to_condlist(section,"on_stop")
 
-	local on_use 	= "true"
-	local on_start 	= "true"
-	local on_stop	= "true"
-
-	if(ini:line_exist("animated_object", "on_use")) then
-		on_use = ini:r_string_ex("animated_object", "on_use")
-	end
-	self.on_use = xr_logic.parse_condlist(nil, "door_binder_labx8", "on_use", on_use)
-
-	if(ini:line_exist("animated_object", "on_start")) then
-		on_start = ini:r_string_ex("animated_object", "on_start")
-	end
-	self.on_start = xr_logic.parse_condlist(nil, "door_binder_labx8", "on_start", on_start)
-
-	if(ini:line_exist("animated_object", "on_stop")) then
-		on_stop = ini:r_string_ex("animated_object", "on_stop")
-	end
-	self.on_stop = xr_logic.parse_condlist(nil, "door_binder_labx8", "on_stop", on_stop)
-
-	self.idle_delay = ini:r_float_ex("animated_object", "idle_delay") or 2000
-	self.start_delay = ini:r_float_ex("animated_object", "start_delay") or 0
+	self.idle_delay = ini:r_float_ex(section, "idle_delay") or 2000
+	self.start_delay = ini:r_float_ex(section, "start_delay") or 0
 	
 	self.loaded = false
 	self.anim_time = 0
 end
 
-function door_binder_labx8:net_spawn(server_object)
-	if not(object_binder.net_spawn(self, server_object)) then
+function door_binder_labx8:net_spawn(se_abstract)
+	if not(object_binder.net_spawn(self, se_abstract)) then
 		return false
 	end
 	db.add_anim_obj(self.object, self)
@@ -122,12 +104,9 @@ function door_binder_labx8:update(delta)
 		end
 	end
 	
-	local tip_string = self.tip and xr_logic.pick_section_from_condlist(get_story_object("actor"), self.object, self.tip) or "none"
-	
-	if (tip_string ~= "none") then 
+	local tip_string = self.tip and xr_logic.pick_section_from_condlist(get_story_object("actor"), self.object, self.tip)
+	if (tip_string and tip_string ~= "" and tip_string ~= "nil") then
 		self.object:set_tip_text(tip_string)
-	else
-		self.object:set_tip_text("")
 	end
 end
 

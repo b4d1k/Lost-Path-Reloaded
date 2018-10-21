@@ -5,11 +5,7 @@ function command_get_list()
 end
 
 function command_get_count()
-	local count = 0
-	for k,v in pairs(cmd) do
-		count = count + 1
-	end
-	return count
+	return table.size(cmd)
 end
 
 function command_exists(name)
@@ -46,6 +42,17 @@ function check_and_set_help(caller,txt,owner,msg)
 		return
 	end
 	return wrd,rest
+end 
+
+function cmd.sandbox(me,txt,owner,p)
+	if txt and not (txt == '') then
+		local function start()
+			dofile(getFS():update_path('$game_scripts$', txt..'.lua'))
+		end
+		local condition, err = pcall(start)
+		printf(condition and '--Succesfull '..txt..'.lua execution!' or '! '..err)
+		get_console():execute('flush')
+	end
 end
 
 -- HELP
@@ -296,6 +303,21 @@ function cmd.community(me,txt,owner,p)
 	end
 	return "community:= invalid community"
 end
+
+-- Name
+function cmd.name(me,txt,owner,p)
+	local wrd = check_and_set_help(me,txt,owner,"<name>")
+	if (wrd) then
+		local se_actor = alife():actor()
+		wrd = wrd:gsub("(%l)(%w*)", function(a,b) return string.upper(a)..b end)
+		wrd = wrd:gsub("_", " ")
+		se_actor:set_character_name(wrd)
+		return "name:= actor name changed to "..wrd
+	end
+	
+	return "name:= invalid name"
+end
+
 -- SPAWN
 --[[
 example usage:
@@ -1031,7 +1053,7 @@ function cmd.wound(me,txt,owner,p)
 		--[[
 		local h = hit()
 		h.power = vo.health+0.05
-		h.direction = vector()
+		h.direction = VEC_ZERO
 		h.bone = "bip01_spine"
 		h.draftsman = vo
 		h.impulse = 6000
@@ -1247,7 +1269,7 @@ function get_position_offset(npc,o)
 	if not (attach_bone_name) then
 		return
 	end
-	local pos1 = npc:bone_position(attach_bone_name)
+	local pos1 = alun_utils.safe_bone_pos(npc,attach_bone_name)--npc:bone_position(attach_bone_name)
 	local pos2 = o:center()
 	return pos1:sub(pos2)
 end
@@ -1322,6 +1344,7 @@ function cmd.invisible(me,txt,owner,p)
 	return "invisible:= type invisible help for list of sub commands"
 end
 
+local crow_fun
 function cmd.crow(me,txt,owner,p)
 	local wrd = check_and_set_help(me,txt,owner,"[on|off]")
 	if not (wrd) then return end
@@ -1329,14 +1352,22 @@ function cmd.crow(me,txt,owner,p)
 	if (wrd == "on") then
 		local se_crow = alun_utils.nearest_object("m_crow")
 		if (se_crow) then
-			xrs_debug_tools.crow_fun = se_crow.id
+			local function mount_crow()
+				if (crow_fun) then
+					db.actor:set_actor_position(se_crow.position)
+					return false
+				end 
+				return true
+			end
+			crow_fun = true
+			AddUniqueCall(mount_crow)
 			return "crow:= enabled"
 		end
 		return "crow:= no crows found"
 	end
 
 	if (wrd == "off") then
-		xrs_debug_tools.crow_fun = nil
+		crow_fun = nil
 		return "crow:= disabled"
 	end
 
@@ -1345,7 +1376,7 @@ end
 
 local heli_id
 function cmd.heli(me,txt,owner,p)
-	local wrd = check_and_set_help(me,txt,owner,"[spawn|move]")
+	local wrd = check_and_set_help(me,txt,owner,"[spawn|move|mount|dismount]")
 	if not (wrd) then return end
 
 	if (wrd == "spawn") then
@@ -1382,11 +1413,20 @@ function cmd.heli(me,txt,owner,p)
 		return "heli:= move failed"
 	end
 
-	if (wrd == "attack") then
-
-
-
-
+	if (wrd == "mount") then
+		local heli
+		for id,o in pairs(db.heli) do
+			heli = o
+			break
+		end
+		if (heli) then
+			db.actor:attach_vehicle(heli)
+			return "heli:= mounted"
+		end
+		return "heli:= not found"
+	elseif (wrd == "dismount") then 
+		db.actor:detach_vehicle()
+		return "heli:= dismounted"
 	end
 	return "heli:= type heli help for list of sub commands"
 end
@@ -1633,13 +1673,13 @@ function cmd.level(me,txt,owner,p)
 				data.dest_game_vertex_id = gvid
 				data.dest_level_vertex_id = lvid
 				data.dest_position = pos
-				data.dest_direction = vector():set(0,0,0)
+				data.dest_direction = VEC_ZERO
 				data.dest_level_name = level
 				data.silent_mode = 1
 				
 				data.shapes[1] = {}
 				data.shapes[1].shtype = 0
-				data.shapes[1].offset = vector():set(0,0,0)
+				data.shapes[1].offset = VEC_ZERO
 				data.shapes[1].radius = 5
 				
 				data.hint = "level_changer_invitation"
@@ -2072,4 +2112,69 @@ function cmd.pstor_test(me,txt,owner,p)
 	end
 
 	return "pstor_test:= successfully saved 2000 values to db.actor pstor"
+end
+
+
+function setup_debug_logic(npc,st,loaded)
+	local ltx_name = "scripts\\debug_npc.ltx"
+	local ltx = ini_file(ltx_name)
+	if not (ltx) then 
+		return
+	end
+	
+	local id = npc:id()
+	local sim = alife()
+	local se_npc = sim:object(id)
+	local unreg_id = se_npc and se_npc.m_smart_terrain_id
+	if (unreg_id and unreg_id ~= 65535) then
+		local unreg = sim:object(unreg_id)
+		if (unreg) then
+			unreg:unregister_npc(se_npc)
+		end
+	end
+	
+	xr_logic.configure_schemes(npc, ltx, ltx_name, modules.stype_stalker, loaded and st.loaded_section_logic or "logic", "")
+	
+	local section = loaded and st.loaded_active_section or xr_logic.determine_section_to_activate(npc, ltx, "logic", db.actor)
+	xr_logic.activate_by_section(npc, ltx, section, "", loaded)
+	--printf("setup complete")
+end 
+debug_visuals = nil
+function cmd.debug_visuals(me,txt,owner,p)
+	local wrd,rest = check_and_set_help(me,txt,owner,"[all|<visual_name>]")
+	if (wrd) and (wrd == "all" or wrd ~= "") then
+		local check_all = wrd == "all"
+		
+		debug_visuals = {}
+		
+		local gvid = db.actor:game_vertex_id()
+		local pos = db.actor:position()
+
+		local dist = 1
+		local f = getFS()
+		local flist = f:file_list_open_ex("$game_meshes$",bit_or(FS.FS_ListFiles),"*.ogf")
+		local f_cnt = flist:Size()
+		for	it=0, f_cnt-1 do
+			local file = flist:GetAt(it)
+			local visual_name = file:NameFull():sub(1,-5)
+
+			if (check_all or string.find(visual_name,wrd)) then
+				if (string.find(visual_name,"actors\\") == 1 and not string.find(visual_name,"trader") and not string.find(visual_name,"lesnik")) then
+					local newpos = vector():set(pos)
+					newpos:add(vector():set(device().cam_dir):mul(dist))
+					newpos = vector():set(newpos.x,pos.y,newpos.z)
+					local lvid = level.vertex_id(newpos)
+					local se_obj = alife():create("sim_default_stalker_0",newpos,lvid,gvid)
+					if (se_obj) then
+						alife():create("wpn_pkm",se_obj.position,se_obj.m_level_vertex_id,se_obj.m_game_vertex_id,se_obj.id)
+						--printf("%s visual:= %s",se_obj:name(),visual_name)
+						--debug_visuals[se_obj.id] = visual_name
+					end
+					dist = dist + 1
+				end
+			end
+		end
+		return "debug_visuals:= done!"
+	end
+	return "debug_visuals:= type debug_visuals help for a list of subcommands."
 end

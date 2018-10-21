@@ -7,6 +7,10 @@ function round(num, idp)
   return math.floor(num * mult + 0.5) / mult
 end
 
+function round100(num)
+	return 100 * round(num/100)
+end
+
 -- Переводит переменную любого типа (включая nil) в строку. Используется для отладочного вывода информации.
 function to_str(what)
 	if what == nil then
@@ -453,13 +457,13 @@ end
 
 -- true, если нужно поворачивать влево
 function angle_left(dir1, dir2)
-	local dir_res = vector()
+	local dir_res = vector():set(0,0,0)
 	dir_res:crossproduct(dir1, dir2)
 	return dir_res.y <= 0
 end
 
 function angle_left_xz(dir1, dir2)
-	local dir_res = vector()
+	local dir_res = vector():set(0,0,0)
 	dir1.y = 0
 	dir2.y = 0
 	dir_res:crossproduct(dir1, dir2)
@@ -559,15 +563,17 @@ end
 
 -- отослать в ближайшую разрешённую ноду по направлению к заданной.
 -- возвращает vertex_id, в которое отправил персонажа
-function send_to_nearest_accessible_vertex( npc, v_id, caller)
-	if not (v_id and v_id < 4294967295 and npc:accessible( v_id )) then
-		local vtemp = vector()
-		--printf("vertex_position")
-		v_id, vtemp = npc:accessible_nearest(v_id and level.vertex_position(v_id) or npc:position(), vtemp )
+function send_to_nearest_accessible_vertex(npc,v_id,caller)
+	if (v_id == nil or v_id >= 4294967295) then
+		npc:set_dest_level_vertex_id(npc:level_vertex_id())
+		return npc:level_vertex_id()
 	end
-
-	npc:set_dest_level_vertex_id( v_id )
-
+	if not (npc:accessible(v_id)) then
+		local new_lvid,vtemp = npc:accessible_nearest(level.vertex_position(v_id),vector():set(0,0,0))
+		npc:set_dest_level_vertex_id(new_lvid)
+		return new_lvid
+	end
+	npc:set_dest_level_vertex_id(v_id)
 	return v_id
 end
 
@@ -607,8 +613,10 @@ end
 --' Вычитка свойств для спауна объектов.
 function parse_names(s)
 	local t = {}
+	local size_t = 0
 	for name in string.gmatch( s, "([%w_%-.\\]+)%p*" ) do
-		table.insert( t, name )
+		size_t = size_t + 1 
+		t[size_t] = name
 	end
 	return t
 end
@@ -619,6 +627,7 @@ function parse_spawns(str)
 	local n = #t
 
 	local ret_table = {}
+	local size_t = 0
 	local k = 1
 	while k <= n do
 		local spawn = {}
@@ -640,8 +649,8 @@ function parse_spawns(str)
 			spawn.prob = 1
 			k = k + 1
 		end
-		table.insert(ret_table, spawn)
-
+		size_t = size_t + 1
+		ret_table[size_t] = spawn
 	end
 	return ret_table
 end
@@ -700,7 +709,7 @@ function parse_data(npc,s)
 			if sound then
 				dat.sound = xr_logic.parse_condlist(npc, dist, sound, sound)
 			end
-			table.insert(t, dat)
+			t[#t+1] = dat
 		end
 	end
 	return t
@@ -723,7 +732,7 @@ function parse_syn_data(npc,s)
 
 			dat.state = state
 			dat.sound = sound
-			table.insert(t, dat)
+			t[#t+1] = dat
 		end
 	end
 	return t
@@ -848,4 +857,91 @@ end
 
 function pos_in_rect(p,r)
 	return (p.x >= r.x1) and (p.x <= r.x2) and (p.y >= r.y1) and (p.y <= r.y2)
+end
+
+-- useful to escape string before use with lua pattern matching
+function escape_lua_pattern(s)
+	local matches = {
+		["^"] = "%^",
+		["$"] = "%$",
+		["("] = "%(",
+		[")"] = "%)",
+		["%"] = "%%",
+		["."] = "%.",
+		["["] = "%[",
+		["]"] = "%]",
+		["*"] = "%*",
+		["+"] = "%+",
+		["-"] = "%-",
+		["?"] = "%?",
+		["\0"] = "%z"
+	}
+    return (s:gsub(".",matches))
+end
+
+-- because xr_logic.parse_condlist npc, section, field params are only used on error
+function parse_condlist(src)
+	return xr_logic.parse_condlist(nil,nil,nil,src)
+end
+
+function get_ext(s)
+	return string.gsub(s,"(.*)%.","")
+end
+
+--require("lua_extensions")
+local lfs = require("lfs")
+lfs_ignore_exact_ext_match = false
+function file_for_each(node,ext,func,nonrecursive,...)
+	local stack = {}
+	local deepest
+	while not deepest do
+		if (node) then
+			for file in lfs.dir(node) do
+				if (file ~= ".." and file ~= ".") then
+					local fullpath = node .. "\\" .. file
+					local mode = lfs.attributes(fullpath,"mode")
+					if (mode == "file") then
+						for i=1,#ext do
+							if (lfs_ignore_exact_ext_match and string.find(get_ext(file), ext[i]) or get_ext(file) == ext[i]) then
+								func(node,file,fullpath,...)
+							end
+						end
+					elseif (mode == "directory" and nonrecursive ~= true) then
+						table.insert(stack,fullpath)
+					end
+				end
+			end
+		end
+		if (#stack > 0) then
+			node = stack[#stack]
+			stack[#stack] = nil
+		else
+			deepest = true
+		end
+	end
+	if lfs_ignore_exact_ext_match then
+		lfs_ignore_exact_ext_match = false
+	end
+end
+
+function directory_for_each(node,func,...)
+	for l in lfs.dir(node) do
+		if (l ~= ".." and l ~= ".") then
+			if lfs.attributes(node.."\\"..l,"mode") == "directory" then
+				func(node,l,...)
+			end
+		end
+	end
+end
+
+local function swap(array, index1, index2)
+    array[index1], array[index2] = array[index2], array[index1]
+end
+function shuffle(array)
+    local counter = #array
+    while counter > 1 do
+        local index = math.random(counter)
+        swap(array, index, counter)
+        counter = counter - 1
+    end
 end

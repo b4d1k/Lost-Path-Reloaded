@@ -27,7 +27,7 @@ function setup_buy_sell_conditions(npc,id)
 	
 	local condlist = xr_logic.parse_condlist(npc, "trader", "buy_condition", tm[id].config:r_string_ex("trader", "buy_condition") or "")
 	local str = condlist and xr_logic.pick_section_from_condlist(db.actor, npc, condlist)
-	if (str == nil or str == "") then
+	if (str == nil or str == "" or str == "nil") then
 		printf("Wrong section in buy_condition condlist for npc [%s]!", npc:name())
 		return
 	end
@@ -37,7 +37,7 @@ function setup_buy_sell_conditions(npc,id)
 
 	condlist = xr_logic.parse_condlist(npc, "trader", "sell_condition", tm[id].config:r_string_ex("trader", "sell_condition") or "")
 	str = condlist and xr_logic.pick_section_from_condlist(db.actor, npc, condlist)
-	if(str == nil or str == "") then
+	if(str == nil or str == "" or str == "nil") then
 		printf("Wrong section in sell_condition condlist for npc [%s]!", npc:name())
 		return
 	end
@@ -107,7 +107,6 @@ function save_state(id,m_data)
 		printf("ERROR: trade_manager: Invalid pathname %s.",tm[id].cfg_ltx)
 		return
 	end
-	
 	m_data.trade_manager = empty_table(m_data.trade_manager)
 	m_data.trade_manager.cfg_ltx = tm[id].cfg_ltx
 	m_data.trade_manager.current_buy_condition = tm[id].current_buy_condition
@@ -117,7 +116,7 @@ function save_state(id,m_data)
 end 
 
 function load_state(id,m_data)
-	if not (id and m_data.trade_manager and m_data.trade_manager and m_data.trade_manager.cfg_ltx) then
+	if not (id and m_data.trade_manager and m_data.trade_manager.cfg_ltx) then
 		m_data.trade_manager = nil
 		return
 	end
@@ -129,7 +128,7 @@ function load_state(id,m_data)
 	if (npc:character_community() == "zombied") then 
 		return 
 	end 
-	
+
 	tm[id] = tm[id] or {}
 	tm[id].cfg_ltx = m_data.trade_manager.cfg_ltx
 	tm[id].config = ini_file(tm[id].cfg_ltx)
@@ -141,7 +140,7 @@ function load_state(id,m_data)
 	tm[id].current_sell_condition = m_data.trade_manager.current_sell_condition
 	tm[id].current_buy_supplies = m_data.trade_manager.current_buy_supplies
 	tm[id].resupply_time = m_data.trade_manager.resupply_time or game.get_game_time()
-	
+
 	m_data.trade_manager = nil
 end 
 

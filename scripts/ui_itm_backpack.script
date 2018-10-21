@@ -51,7 +51,7 @@ end
 function backpack_ui:OnInput()
 	local txt = self.input:GetText()
 	if (txt == nil or txt == "") then
-		txt = level.name().." stash"
+		txt = strformat(game.translate_string("st_itm_stash_of_character"), db.actor:character_name())
 	end
 
 	local se_obj = alife_object(self.box_id)

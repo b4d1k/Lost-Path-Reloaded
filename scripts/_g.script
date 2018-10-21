@@ -8,11 +8,7 @@
 		Such thing is 'okay' in db.storage, but that is because on net_destroy db.storage[id] is set nil. So if you are keeping track of objects directly in a table, instead of ID 
 		then you absolutely must rid of every single reference to the userdata so that it can be destroy and garbage collected. Otherwise you end up with undetectable issues.
 --]]
-if (jit == nil) then
-	profiler.setup_hook	()
-end
-
-GAME_VERSION = "1.4.22"
+GAME_VERSION = "1.5b r6"
 
 if string.find(command_line(), "-dbg") then
 	DEV_DEBUG = true
@@ -22,10 +18,6 @@ if string.find(command_line(), "-dbg") then
 end
 
 USE_INI_MEMOIZE = true
-
--- Improves performance if true, by disabling update methods for squads and smart terrains on levels not linked in configs\ai_tweaks\simulation_objects.ltx
--- But this means simulation will only be active on actor level and linked levels everything else will remain in an idle state
-DEACTIVATE_SIM_ON_NON_LINKED_LEVELS = true
 
 -------------------------------------------------------------------------------------------------
 -- Use marshal library for saving persistent data (like xr_logic pstor)
@@ -39,7 +31,6 @@ USE_MARSHAL = marshal ~= nil
 ----------------------------------------------------------------------
 mus_vol = 0
 amb_vol = 0
-b_discard_settings_shown = false
 ----------------------------------------------------------------------
 
 function start_game_callback()
@@ -48,32 +39,26 @@ function start_game_callback()
 	if (USE_MARSHAL) then
 		printf("using marshal library")
 	end
-	
-	sound_theme.load_sound()
-		
+
 	-- Alundaio
 	if (axr_main) then axr_main.on_game_start() end
 	-- End Alundaio
-
-	SIMBOARD = nil
+	
 	sim_board.get_sim_board()
-
-	smart_names.init_smart_names_table()
-	task_manager.clear_task_manager()
-	--xr_sound.start_game_callback()
 	dialog_manager.fill_phrase_table()
-
-	sim_objects.clear()
-	sr_light.clean_up ()
 	pda.add_quick_slot_items_on_game_start()
 end
 
+--local alife_sim
 function alife_object(id)
 	if (id == nil or id >= 65535) then
 		callstack()
 		printf("ALIFE OBJECT ID IS %s!",id)
 		return
 	end
+	-- if not (alife_sim) then
+		-- alife_sim = alife()
+	-- end
 	return alife():object(id)
 end
 -------------------------------------------------------------------------------------------------------
@@ -107,6 +92,7 @@ end
 -- param 2 - Milliseconds as number
 --------------------------------------------
 function SetHudMsg(msg,n)
+	n = n or 5
 	msg = tostring(msg)
 	local hud = get_hud()
 	if (hud) then
@@ -273,7 +259,7 @@ function JumpToLevel(new_level)
 	for id,smart in pairs(db.smart_terrain_by_id) do
 		cvertex = smart and gg:vertex(smart.m_game_vertex_id)
 		if (cvertex and sim:level_name(cvertex:level_id()) == new_level) then
-			ChangeLevel(cvertex:level_point(),cvertex:level_vertex_id(),smart.m_game_vertex_id,vector():set(0,0,0))
+			ChangeLevel(cvertex:level_point(),cvertex:level_vertex_id(),smart.m_game_vertex_id,VEC_ZERO)
 			return true
 		end
 	end
@@ -284,7 +270,7 @@ function JumpToLevel(new_level)
 			cvertex = gg:vertex(gvid)
 			lvl = sim:level_name(cvertex:level_id())
 			if (lvl == new_level) then
-				ChangeLevel(cvertex:level_point(),cvertex:level_vertex_id(),gvid,vector():set(0,0,0))
+				ChangeLevel(cvertex:level_point(),cvertex:level_vertex_id(),gvid,VEC_ZERO)
 				return true
 			end
 		else
@@ -559,7 +545,7 @@ function parse_names( s )
 	local t = {}
 	--for name in string.gmatch( s, "([%w_\\]+)%p*" ) do
 	for name in string.gmatch( s, "([%w_%-.\\]+)%p*" ) do
-		table.insert( t, name )
+		t[#t+1] = name
 	end
 	return t
 end
@@ -584,7 +570,7 @@ end
 function parse_nums( s )
 	local t = {}
 	for entry in string.gmatch( s, "([%-%d%.]+)%,*" ) do
-		table.insert( t, tonumber( entry ) )
+		t[#t+1] = tonumber(entry)
 	end
 	return t
 end
@@ -749,6 +735,7 @@ end
 local monster_classes
 local weapon_classes
 local artefact_classes
+local anomaly_classes
 
 function IsOutfit(o,c)
 	if not c then
@@ -856,26 +843,59 @@ function IsMonster(o,c)
 		monster_classes = {
 		[clsid.bloodsucker_s] 			= true,
 		[clsid.boar_s] 					= true,
-		[clsid.dog_s] 					= true,
-		[clsid.flesh_s] 				= true,
-		[clsid.pseudodog_s] 			= true,
 		[clsid.burer_s] 				= true,
 		[clsid.cat_s] 					= true,
-		[clsid.rat] 					= true,
-		[clsid.rat_s]					= true,
 		[clsid.chimera_s] 				= true,
 		[clsid.controller_s] 			= true,
+		[clsid.dog_s] 					= true,
+		[clsid.flesh_s] 				= true,
 		[clsid.fracture_s] 				= true,
-		[clsid.poltergeist_s] 			= true,
 		[clsid.gigant_s] 				= true,
-		[clsid.zombie_s] 				= true,
+		[clsid.karlik_s]				= true,
+		[clsid.poltergeist_s] 			= true,
+		[clsid.pseudodog_s] 			= true,
+		[clsid.psy_dog_phantom_s] 		= true,
+		[clsid.psy_dog_s] 				= true,
+		[clsid.rat] 					= true,
+		[clsid.rat_s]					= true,
 		[clsid.snork_s] 				= true,
 		[clsid.tushkano_s] 				= true,
-		[clsid.psy_dog_s] 				= true,
-		[clsid.psy_dog_phantom_s] 		= true
+		[clsid.zombie_s] 				= true		
 		}
 	end
 	return c and monster_classes[c] or false
+end
+
+function IsAnomaly(o,c)
+	if not (c) then
+		c = o and o:clsid()
+	end
+	if not (anomaly_classes) then
+		anomaly_classes = {
+		[clsid.zone]				= true,
+		[clsid.zone_acid_fog]		= true,
+		[clsid.zone_bfuzz]			= true,
+		[clsid.zone_campfire]		= true,
+		[clsid.zone_dead]			= true,
+		[clsid.zone_galantine]		= true,
+		[clsid.zone_mincer]			= true,
+		[clsid.zone_mosquito_bald]	= true,
+		[clsid.zone_radioactive]	= true,
+		[clsid.zone_rusty_hair]		= true,
+		[clsid.zone_bfuzz_s]		= true,
+		[clsid.zone_mbald_s]		= true,
+		[clsid.zone_galant_s]		= true,
+		[clsid.zone_mincer_s]		= true,
+		[clsid.zone_radio_s]		= true,
+		[clsid.zone_torrid_s]		= true,
+		[clsid.zone_nograv_s]		= true,
+		}
+	end
+	return c and anomaly_classes[c] or false
+end
+
+function isLc(obj)
+	return (obj:clsid() == clsid.level_changer)
 end
 
 function IsStalker(o,c)
@@ -1013,7 +1033,8 @@ is_squad_monster = {
 		["monster_zombied_night"] 	= true,
 		["monster_special"] 		= true,
 		["monster"]					= true
-}squad_community_by_behaviour = {
+}
+squad_community_by_behaviour = {
 		["stalker"]							= "stalker",
 		["bandit"]							= "bandit",
         ["csky"]							= "csky",
@@ -1031,7 +1052,8 @@ is_squad_monster = {
 		["monster_zombied_day"]				= "monster",
 		["monster_zombied_night"]			= "monster",
 		["monster_special"]					= "monster"
-}-------------------------------------------------------------------------------------------
+}
+-------------------------------------------------------------------------------------------
 function get_object_community(obj)
 	if type(obj.id) == "function" then
 		return character_community(obj)
@@ -1121,7 +1143,7 @@ end
 function npc_in_actor_frustrum(npc)
 	local actor_dir = device().cam_dir
 	--local actor_dir = db.actor:direction()
-	local npc_dir = vector():sub(npc:position(),db.actor:position())
+	local npc_dir = vec_sub(npc:position(),db.actor:position())
 	local yaw = yaw_degree3d(actor_dir, npc_dir)
 	--printf("YAW %s", tostring(yaw))
 	return yaw < 35
@@ -1186,8 +1208,7 @@ function create_ammo(section, position, lvi, gvi, pid, num)
 	local num_in_box = ini:r_u32(section, "box_size")
 	local t = {}
 	while num > num_in_box do
-		local obj = alife():create_ammo(section, position, lvi,	gvi, pid, num_in_box)
-		table.insert(t, obj)
+		t[#t+1] = alife():create_ammo(section, position, lvi,	gvi, pid, num_in_box)
 		num = num - num_in_box
 	end
 	local obj = alife():create_ammo(section, position, lvi,	gvi, pid, num)
@@ -1270,37 +1291,23 @@ function change_team_squad_group(se_obj, team, squad, group)
 	end
 	--printf("_G:TSG: [%s][%s][%s]", tostring(se_obj.team), tostring(se_obj.squad), tostring(se_obj.group))
 end
---     Story_ID -------------------------------------------------------------
-function add_story_object(obj_id , story_obj_id)
-	story_objects.get_story_objects_registry():register(obj_id , story_obj_id)
+----------------------------------------Story_ID -------------------------------------
+function get_story_se_object(story_id)
+	local obj_id = story_objects.object_id_by_story_id[story_id]
+	return obj_id and alife_object(obj_id)
 end
 
-function get_story_se_object(story_obj_id)
-	local obj_id = story_obj_id and story_objects.get_story_objects_registry():get(story_obj_id)
-	if obj_id == nil then return nil end
-	return alife_object(obj_id)
-end
-
-function get_story_object(story_obj_id)
-	local obj_id = story_obj_id and story_objects.get_story_objects_registry():get(story_obj_id)
-	if obj_id == nil then return nil end
-	return (db.storage[obj_id] and db.storage[obj_id].object) or (level ~= nil and level.object_by_id(obj_id))
+function get_story_object(story_id)
+	local obj_id = story_objects.object_id_by_story_id[story_id]
+	return obj_id and level.object_by_id(obj_id)
 end
 
 function get_object_story_id(obj_id)
-	return obj_id and story_objects.get_story_objects_registry():get_story_id(obj_id)
+	return obj_id and story_objects.story_id_by_object_id[obj_id]
 end
 
-function get_story_object_id(story_obj_id)
-	return story_obj_id and story_objects.get_story_objects_registry():get(story_obj_id)
-end
-
-function unregister_story_object_by_id(obj_id)
-	story_objects.get_story_objects_registry():unregister_by_id(obj_id)
-end
-
-function unregister_story_id(story_id)
-	story_objects.get_story_objects_registry():unregister_by_story_id(story_id)
+function get_story_object_id(story_id)
+	return story_id and story_objects.object_id_by_story_id[story_id]
 end
 
 -----------------------------------------------------------------------------------------------
@@ -1318,8 +1325,7 @@ function get_object_squad(object,caller)
 end
 
 function get_story_squad(story_id)
-	local squad_id = get_story_object_id(story_id)
-	return squad_id and alife_object(squad_id)
+	return get_story_se_object(story_id)
 end
 
 --Проверка по временному интервалу.
@@ -1358,12 +1364,18 @@ end
 ------------------------------------------------------------------------------------------------------
 -- ENGINE EXPORTS!!!
 ------------------------------------------------------------------------------------------------------
+local flags = { ret_value = true }
+function CInventoryBox_CanTake(obj,itm)
+	flags.ret_value = true
+	SendScriptCallback("inventory_box_can_take",obj,itm,flags)
+	return flags.ret_value
+end
 -- called when an inventory item is eaten/used
 -- returning false will prevent the item from being used
 function CInventory__eat(npc,item)
-	local return_flag = true
-	SendScriptCallback("on_before_item_use",npc,item,return_flag)
-	return return_flag
+	flags.ret_value = true
+	SendScriptCallback("on_before_item_use",npc,item,flags)
+	return flags.ret_value
 end
 
 -- Called before actor hit callback
@@ -1400,15 +1412,29 @@ function CActor__BeforeHitCallback(actor,shit,bone_id)
 	end
 	
 	if (shit.power > 0) then 
-		if (shit.draftsman and shit.draftsman:id() ~= 0 and IsStalker(shit.draftsman) and shit.draftsman:relation(db.actor) == game_object.friend) then 
+		if (shit.draftsman and shit.draftsman:id() ~= 0 and shit.draftsman:cast_Stalker() and shit.draftsman:relation(db.actor) == game_object.friend) then 
 			return false 
 		end
 	end
 	
-	local flags = { ret_value = true }
+	flags.ret_value = true
 	SendScriptCallback("actor_on_before_hit",shit,bone_id,flags)
 	return flags.ret_value
 end
+
+-- called in ai_stalker_fire.cpp CAI_Stalker::Hit()
+-- returning false will ignore the hit completely
+function CAI_Stalker__BeforeHitCallback(npc,shit,bone_id)
+	-- friendly fire
+	if (shit.power > 0) then 
+		if (shit.draftsman and shit.draftsman:id() ~= 0 and shit.draftsman:cast_Stalker() and shit.draftsman:relation(npc) == game_object.friend) then 
+			return false
+		end
+	end
+	flags.ret_value = true
+	SendScriptCallback("npc_on_before_hit",shit,bone_id,flags)
+	return flags.ret_value
+end 
 
 -- called in CSE_ALifeDynamicObject::on_unregister()
 -- good place to remove ids from persistent tables
@@ -1469,12 +1495,10 @@ function CALifeUpdateManager__on_before_change_level(packet)
 	-- reset read pointer
 	packet:r_seek(2)
 		
-	if (bind_container.containers) then
-		for id,t in pairs(bind_container.containers) do
-			if (t.id) then
+	if (bind_container.se_inv_box_containers) then
+		for id,v in pairs(bind_container.se_inv_box_containers) do
 				pos.y = pos.y+100
-				TeleportObject(t.id,pos,lvid,gvid)
-			end
+			TeleportObject(id,pos,lvid,gvid)
 		end	
 	end
 end
@@ -1502,6 +1526,26 @@ function give_object_to_actor(obj,count)
   for i=1, count do
      alife():create(obj,db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),db.actor:id())
   end
+end
+
+function string.gsplit(s, sep, plain)
+	local start = 1
+	local done = false
+	local function pass(i, j, ...)
+		if i then
+			local seg = s:sub(start, i - 1)
+			start = j + 1
+			return seg, ...
+		else
+			done = true
+			return s:sub(start)
+		end
+	end
+	return function()
+		if done then return end
+		if sep == '' then done = true return s end
+		return pass(s:find(sep, start, plain))
+	end
 end
 
 -- INI Extensions
@@ -1583,17 +1627,23 @@ if (USE_INI_MEMOIZE) then
 		return a,b,c
 	end
 else
-	function ini_file.r_string_ex(ini,s,k)
+	function ini_file.r_string_ex(ini,s,k,def)
 		--callstack()
 		--printf("r_string_ex(%s,%s)",s,k)
-		return ini:section_exist(s) and ini:line_exist(s,k) and ini:r_string(s,k) or nil
+		if not (ini:section_exist(s) and ini:line_exist(s,k)) then
+			return def
+		end
+		return ini:r_string(s,k) or def
 	end
-		function ini_file.r_float_ex(ini,s,k)
+	function ini_file.r_float_ex(ini,s,k,def)
 		--callstack()
 		--printf("r_float_ex(%s,%s)",s,k)
-		return ini:section_exist(s) and ini:line_exist(s,k) and ini:r_float(s,k) or nil
+		if not (ini:section_exist(s) and ini:line_exist(s,k)) then
+			return def
+		end
+		return ini:r_float(s,k) or def
 	end
-		function ini_file.r_bool_ex(ini,s,k,def)
+	function ini_file.r_bool_ex(ini,s,k,def)
 		--callstack()
 		if not (ini:section_exist(s) and ini:line_exist(s,k)) then
 			return def
@@ -1602,9 +1652,21 @@ else
 		local v = ini:r_string(s,k)
 		return v == nil and def or v == "true" or v == "1" or false
 	end
-		function ini_file.r_line_ex(ini,s,k)
+	function ini_file.r_line_ex(ini,s,k)
 		--callstack()
 		return ini:r_line(s,k,"","")
+	end
+end
+function ini_file.r_string_to_condlist(ini,s,k,def)
+	local src = ini:r_string_ex(s,k) or def
+	if (src) then
+		return xr_logic.parse_condlist(nil, s, k, src)
+	end
+end
+function ini_file.r_list(ini,s,k,def)
+	local src = ini:r_string_ex(s,k) or def
+	if (src) then
+		return parse_names(src)
 	end
 end
 
@@ -1670,7 +1732,7 @@ function ini_file_ex:get_sections(keytable)
 		if (keytable) then
 			t[section] = true
 		else
-			table.insert(t,section)
+			t[#t+1] = section
 		end
 	end
 	self.ini:section_for_each(itr)
@@ -1703,4 +1765,33 @@ end
 
 function ini_file_ex:r_float_ex(s,k)
 	return self.ini:section_exist(s) and self.ini:line_exist(s,k) and tonumber(self.ini:r_string(s,k)) or nil
+end
+
+function ini_file_ex:r_string_to_condlist(s,k,def)
+	local src = self:r_string_ex(s,k) or def
+	if (src) then
+		return xr_logic.parse_condlist(nil, s, k, src)
+	end
+end
+
+function ini_file_ex:r_list(s,k,def)
+	local src = self:r_string_ex(s,k) or def
+	if (src) then
+		return parse_names(src)
+	end
+end
+-----------------------------------------
+-- Constants
+-----------------------------------------
+VEC_ZERO 	= vector():set(0,0,0)
+VEC_X 		= vector():set(1,0,0)
+VEC_Y 		= vector():set(0,1,0)
+VEC_Z 		= vector():set(0,0,1)
+
+function vec_sub(a,b)
+	return vector():set(a):sub(b)
+end
+
+function vec_add(a,b)
+	return vector():set(a):add(b)
 end

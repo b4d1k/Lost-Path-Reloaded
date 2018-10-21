@@ -15,13 +15,13 @@ local ranks_loaded = false
 -- парсит заданную строку рангов в заданную таблицу.
 -- возвращает название максимального ранга
 function parse_ranks( s, tbl )
-	s = "0," .. s .. ",10000"
+	s = "0," .. s .. ",99999"
 
 	local t = parse_names( s )
 	local i = 2
 
 	while i < #t do
-		tbl[t[i]] = { tonumber(t[i-1]), tonumber(t[i+1]) }
+		table.insert(tbl,{t[i],tonumber(t[i-1]),tonumber(t[i+1])})
 		i = i + 2
 	end
 
@@ -45,13 +45,34 @@ end
 
 --
 function get_rank_name( rank, tbl )
-	for name, interval in pairs( tbl ) do
-		if rank >= interval[1] and rank < interval[2] then
-			return name
+	for i,t in ipairs(tbl) do 
+		if (rank >= t[2] and rank < t[3]) then 
+			return t[1]
 		end
 	end
+	return
+end
 
-	return nil
+-- возвращает табличку с интервалом рангов для заданного названия интервала
+function get_rank_interval( name )
+	if not ranks_loaded then
+		read_all_ranks()
+	end
+	for i,t in ipairs(stalker_rank_intervals) do 
+		if (name == t[1]) then 
+			return t[2],t[3]
+		end
+	end	
+	return
+end
+
+function get_next_rank_name(name)
+	for i,t in ipairs(stalker_rank_intervals) do 
+		if (name == t[1] and stalker_rank_intervals[i+1]) then 
+			return stalker_rank_intervals[i+1][1]
+		end
+	end
+	return stalker_max_rank_name
 end
 
 -- возвращает название ранга заданного game_object (персонажа)
@@ -86,13 +107,3 @@ function get_se_obj_rank_name( obj )
 		return get_rank_name( obj_rank, monster_rank_intervals ) or monster_max_rank_name
 	end
 end
-
--- возвращает табличку с интервалом рангов для заданного названия интервала
-function get_rank_interval( name )
-	if not ranks_loaded then
-		read_all_ranks()
-	end
-
-	return stalker_rank_intervals[name] or monster_rank_intervals[name]
-end
-

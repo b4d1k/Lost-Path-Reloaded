@@ -508,11 +508,10 @@ function calculate_priority(PRT_subtable, PTID_subtable, npc, phrase_id)
 			priority = priority + 1
 		end
 	else
-
-	if(xr_wounded.is_wounded(npc)) then
-		priority = -1
-	else
-		priority = priority + 1
+		if(xr_wounded.is_wounded(npc)) then
+			priority = -1
+		else
+			priority = priority + 1
 		end
 	end
 

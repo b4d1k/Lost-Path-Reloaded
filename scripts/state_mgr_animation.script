@@ -361,40 +361,9 @@ function animation:add_anim(anm, state)
 		local dir = self.mgr.animation_direction
 		local rot_y = -math.deg(math.atan2(dir.x, dir.z))
 		npc:add_animation(anm, true, self.mgr.animation_position, vector():set(0,rot_y,0), true)
-	elseif (state.prop == nil or state.prop.moving ~= true) then
-		npc:add_animation(anm, true, false)
 	else
-		npc:add_animation(anm, true, true)
+		npc:add_animation(anm, true, state.prop and state.prop.moving or false)
 	end
---[[	
-	local npc = self.npc
-	local animation_props = state.prop
-	--printf("[%s][%s] add_anim[%s] time[%s] no_rootmove[%s] %s", self.npc:name(), self.name, tostring(anm), time_global(), tostring(animation_props == nil or animation_props.moving ~= true), device():time_global())
-
-	if animation_props == nil or animation_props.moving ~= true then
-		npc:add_animation(anm, true, false)
-		return
-	end
-
-	-- Anee iiceoee/iai?aaeaiea aieiaoee ia caaaiu eee iie o?a i?eiaieeenu
-	if self.mgr.animation_position == nil or self.mgr.pos_direction_applied == true then
-		-- Aieiaoey n ia?aaae?aieai.
-		--npc:set_sight(CSightParams.eSightTypeAnimationDirection, false,false)
---		printf("%s no pos", npc:name())
-		npc:add_animation(anm, true, true)
-	else
-		-- N?aa ia?aaaaony ae?aeoi (aaeie?iue aaeoi?. io?ii aai ia?aaanoe a aaeoi? ?ioaeoiia ii einoyi)
-		local rot_y = -math.deg(math.atan2(self.mgr.animation_direction.x, self.mgr.animation_direction.z))
-
-		--local rot_y2 = math.deg(math.acos( (v1.x*v2.x + v1.y*v2.y)/math.sqrt((v1.x*v1.x + v1.y*v1.y)*(v2.x*v2.x + v2.y*v2.y))  ))
-
-		--printf("%s UGOL %s", npc:name(), rot_y)
-		-- Ie?aneaao?uay no?iea - yoi eiaaa io?ii ioua?aou aieiaoe? a aeiaaeuiuo eii?aeiaoao.
-		npc:add_animation			(anm, true, self.mgr.animation_position, vector():set(0, rot_y, 0), false)
-
-		self.mgr.pos_direction_applied = true
-	end
---]]
 end
 
 -- Вызов коллбека, обычно в этот момент нужен выбор новой анимации.
@@ -510,7 +479,7 @@ function animation:process_special_action(action_table)
 		if (itm) then
 			itm:enable_attachable_item(true)
 		else
-			local se_itm = alife():create(action_table.a,vector(),0,0,self.npc:id())
+			local se_itm = alife():create(action_table.a,vector():set(0,0,0),0,0,self.npc:id())
 			if (se_itm) then
 				CreateTimeEvent(se_itm.id,"delayed_attach",0,delayed_attach,se_itm.id)
 			end
@@ -548,5 +517,27 @@ function animation:process_special_action(action_table)
 	-- Запуск любой функции
 	if action_table.f ~= nil then
 		action_table.f(self.npc)
+	end
+end
+
+function suicide(npc)
+	local target_state = state_mgr.get_state(npc)
+	local wpn = state_mgr_weapon.get_weapon(npc, target_state)
+	if (wpn) then 
+		local h = hit()
+		h.power = 1000
+		h.direction = vector_rotate_y(npc:direction(), 90)
+		h.draftsman = npc
+		h.impulse = 200
+		h.type = hit.wound
+		npc:hit(h)
+		
+		local path = system_ini():r_string_ex(wpn:section(),"snd_shoot")
+		if (path) then
+			local sound=xr_sound.get_safe_sound_object(path)
+			if (sound) then
+				sound:play_at_pos(npc,npc:position())
+			end
+		end
 	end
 end

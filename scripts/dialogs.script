@@ -18,18 +18,20 @@ function npc_is_tech(a,b)
 end
 
 function rescue_hostage(a,b)
+	a:stop_talk()
+	b:stop_talk()
 	local npc = who_is_npc(a,b)
 	local squad = get_object_squad(npc)
 	if (squad) then 
 		for k in squad:squad_members() do
 			utils.se_obj_save_var(k.id,k.object:name(),"companion_cannot_teleport",nil)
-			xrs_kill_wounded.hostage_list[k.id] = nil
+			axr_task_manager.hostages_by_id[k.id] = nil
 		end
 	else 
 		local se_npc = alife_object(npc:id())
 		if (se_npc) then
 			utils.se_obj_save_var(se_npc.id,se_npc:name(),"companion_cannot_teleport",nil)
-			xrs_kill_wounded.hostage_list[se_npc.id] = nil
+			axr_task_manager.hostages_by_id[se_npc.id] = nil
 		end
 	end
 end 
@@ -53,11 +55,21 @@ function text_npc_has_task(a,b)
 	local task_id = axr_task_manager.available_tasks[npc:id()] and axr_task_manager.available_tasks[npc:id()][1] 
 	--printf("text_npc_has_task %s",task_id)
 	
+	local on_job_descr = task_id and task_manager.task_ini:r_string_ex(task_id,"on_job_descr")
+	if (on_job_descr) then 
+		local cond = xr_logic.parse_condlist(db.actor,"task_manager","condlist",on_job_descr)
+		if (cond) then 
+			xr_logic.pick_section_from_condlist(db.actor,db.actor,cond)
+		end
+	end
+	
+	-- fetch
+	-- TODO: Refactor for on_job_descr?
 	local fetch = task_id and task_manager.task_ini:r_string_ex(task_id,"fetch_descr")
 	if (fetch) then
 		axr_task_manager.trigger_fetch_func(task_id)
 		return strformat(game.translate_string(fetch),_FETCH_TEXT or "")
-	end	 
+	end
 	 
 	return game.translate_string(task_id and task_manager.task_ini:r_string_ex(task_id,"job_descr") or "st_no_available_task")
 end
@@ -201,9 +213,18 @@ end
 -- This function allows Player to see NPC inventory as if it was a corpse
 function free_trade_with_npc(a,b)
 	local npc = who_is_npc(a, b)
-	if (hud) then
-		hud:HideActorMenu()
-		npc:use(db.actor)
+	local se_obj = npc and alife_object(npc:id())
+	if (se_obj) then
+		get_hud():HideActorMenu()
+		if not (utils.se_obj_load_var(se_obj.id,se_obj:name(),"companion_cannot_dismiss")) then
+			if (db.actor:position():distance_to_sqr(se_obj.position) <= 625) then
+				npc:use(db.actor)
+			else 
+				SetHudMsg(game.translate_string("st_pda_cant_trade_dist"),3)
+			end
+		else 
+			SetHudMsg(game.translate_string("st_pda_cant_trade"),3)
+		end
 	end
 end
 
@@ -461,7 +482,7 @@ function surrender_victim_answers_1(a,b)
 
 	local r = math.random(1,5)
 
-	if (axr_dynamic_spawn or coc_treasure_manager) and (r <= 2) then
+	if (coc_treasure_manager) and (r <= 2) then
 
 		local function itr(npc,itm)
 			if (IsWeapon(itm)) then
@@ -476,15 +497,9 @@ function surrender_victim_answers_1(a,b)
 			if (has_alife_info("achieved_silver_or_lead") and ((math.random(1,100)/100) <= 0.33)) then
 				coc_treasure_manager.create_random_stash(nil,strformat(game.translate_string("st_itm_stash_of_character"),npc:character_name()))
 			end
-		else
-			axr_dynamic_spawn.random_secret()
 		end
 
-		if (axr_dynamic_spawn.last_secret) then
-			local hint = axr_dynamic_spawn.ini:r_string_ex(axr_dynamic_spawn.last_secret,"hint")
-			hint = hint and " " .. game.translate_string(hint) or ""
-			return game.translate_string("st_surrender_victim_answer_"..math.random(3)) .. hint
-		elseif (coc_treasure_manager and coc_treasure_manager.last_secret) then
+	if (coc_treasure_manager and coc_treasure_manager.last_secret) then
 			return game.translate_string("st_surrender_victim_answer_"..math.random(3))
 		else
 			return game.translate_string("st_surrender_victim_answer_5")
@@ -635,6 +650,7 @@ function transfer_medkit(first_speaker, second_speaker)
 		npc:set_relation(game_object.friend,db.actor)
 	end
 
+	xr_statistic.inc_actor_reputation(1)
 	xr_statistic.inc_counter("help_wounded")
 end
 function transfer_bandage(first_speaker, second_speaker)
@@ -642,7 +658,7 @@ function transfer_bandage(first_speaker, second_speaker)
 	second_speaker:set_relation(game_object.friend, first_speaker)
 end
 function kill_yourself(first_speaker, second_speaker)
-local npc = who_is_npc(first_speaker, second_speaker)
+	local npc = who_is_npc(first_speaker, second_speaker)
 	npc:kill(actor)
 end
 
@@ -680,6 +696,7 @@ end
 function relocate_money(victim, num, type)
 	if db.actor then
 		if type == "in" then
+			num = utils.round100(num)
 			db.actor:give_money(num)
 			-- game_stats.money_quest_update (num)
 

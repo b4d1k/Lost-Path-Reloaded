@@ -60,23 +60,24 @@ function CGeneralTask:__init(id)
 	local i = 0
 	self.condlist = {}
 	while task_ini:line_exist(id, "condlist_"..i) do
-		self.condlist[i] = xr_logic.parse_condlist(nil, "task_manager", "condlist", task_ini:r_string_ex(id, "condlist_"..i))
+		local clst = task_ini:r_string_to_condlist(id,"condlist_"..i)
+		if (clst) then
+			table.insert(self.condlist,clst)
+		end
 		i = i + 1
 	end
 
 	--' Кондлисты на статусы квеста
-	self.on_init = xr_logic.parse_condlist(nil, "task_manager", "condlist",  task_ini:r_string_ex(id,"on_init") or "") 
-	self.on_complete = xr_logic.parse_condlist(nil, "task_manager", "condlist", task_ini:r_string_ex(id,"on_complete") or "")
-	self.on_fail = xr_logic.parse_condlist(nil, "task_manager", "condlist", task_ini:r_string_ex(id,"on_fail") or "")
-	self.on_reversed = xr_logic.parse_condlist(nil, "task_manager", "condlist", task_ini:r_string_ex(id,"on_reversed") or "")
-	self.on_cancel = xr_logic.parse_condlist(nil, "task_manager", "condlist", task_ini:r_string_ex(id,"on_cancel") or "")
+	self.on_init = task_ini:r_string_to_condlist(id,"on_init")
+	self.on_complete = task_ini:r_string_to_condlist(id,"on_complete")
+	self.on_fail = task_ini:r_string_to_condlist(id,"on_fail")
+	self.on_reversed = task_ini:r_string_to_condlist(id,"on_reversed")
+	self.on_cancel = task_ini:r_string_to_condlist(id,"on_cancel")
 	
 	--' Награды за квест
 	-- IMPORTANT ONLY USE THESE WHEN YOU COMPLETE TASK WHILE IN DIALOG!!!
-	local s = task_ini:r_string_ex(id,"reward_money")
-	self.reward_money = s and xr_logic.parse_condlist(nil, "task_manager", "condlist", s)
-	s = task_ini:r_string_ex(id,"reward_item")
-	self.reward_item = s and xr_logic.parse_condlist(nil, "task_manager", "condlist", s)
+	self.reward_money = task_ini:r_string_to_condlist(id,"reward_money")
+	self.reward_item = task_ini:r_string_to_condlist(id,"reward_money")
 
 	--' Статус квеста, может быть: "normal", "selected", "completed", "fail", "reversed"
 	self.status = "normal"
@@ -134,8 +135,10 @@ function CGeneralTask:give_task()
 	t:add_complete_func("task_manager.task_complete")
 	t:add_fail_func("task_manager.task_fail")
 
-	xr_logic.pick_section_from_condlist(db.actor, db.actor, self.on_init)
-
+	if (self.on_init) then
+		xr_logic.pick_section_from_condlist(db.actor, db.actor, self.on_init)
+	end 
+	
 	if self.current_target ~= nil then
 		t:set_map_location(self.spot)
 		t:set_map_object_id(self.current_target)
@@ -173,13 +176,13 @@ function CGeneralTask:check_task(tm)
 		return
 	end
 	
-	local se_obj = self.task_giver_id and self.task_giver_id ~= 65535 and alife_object(self.task_giver_id)
-	if (se_obj) then 
-		local squad = se_obj.group_id and se_obj.group_id ~= 65535 and alife_object(se_obj.group_id)
-		if (squad) then 
-			self.task_giver_id = squad:commander_id()
-		end
-	end
+	-- local se_obj = self.task_giver_id and self.task_giver_id ~= 65535 and alife_object(self.task_giver_id)
+	-- if (se_obj) then 
+		-- local squad = se_obj.group_id and se_obj.group_id ~= 65535 and alife_object(se_obj.group_id)
+		-- if (squad) then 
+			-- self.task_giver_id = squad:commander_id()
+		-- end
+	-- end
 
 	self.check_time = tg + math.random(500,1000) --+ (self.prior*10)
 	local task_updated = false
@@ -243,21 +246,19 @@ end
 
 --' Инициализация награды
 function CGeneralTask:give_reward()
-	local money = self.reward_money and xr_logic.pick_section_from_condlist(db.actor, db.actor, self.reward_money)
-	local items = self.reward_item and xr_logic.pick_section_from_condlist(db.actor, db.actor, self.reward_item)
-
 	-- Награду можно выдать двумя методами: от нпс или просто свалитьс неба. Если не найден НПС, с которым мы в диалоге, то просто валим с неба
-
 	local npc = inventory_upgrades.victim_id and db.storage[inventory_upgrades.victim_id] and db.storage[inventory_upgrades.victim_id].object
 	if not (npc) then
 		return 
 	end
-
-	if money ~= nil then
+	
+	local money = self.reward_money and xr_logic.pick_section_from_condlist(db.actor, db.actor, self.reward_money)
+	if (money and tonumber(money)) then
 		dialogs.relocate_money(npc, tonumber(money), "in")
 	end
 
-	if items ~= nil then
+	local items = self.reward_item and xr_logic.pick_section_from_condlist(db.actor, db.actor, self.reward_item)
+	if (items and items ~= "") then
 		local ancillary_item_table = {}
 		for k,v in pairs(utils.parse_names(items)) do
 			if ancillary_item_table[v] == nil then
@@ -280,10 +281,14 @@ function CGeneralTask:deactivate_task(tsk)
 
 	self.check_time = nil
 	if self.last_check_task == "fail" then
-		xr_logic.pick_section_from_condlist(db.actor, db.actor, tsk.on_fail)
+		if (self.on_fail) then
+			xr_logic.pick_section_from_condlist(db.actor, db.actor, self.on_fail)
+		end
 		news_manager.send_task(db.actor, "fail", tsk)
 	elseif self.last_check_task == "reversed" then
-		xr_logic.pick_section_from_condlist(db.actor, db.actor, self.on_reversed)
+		if (self.on_reversed) then
+			xr_logic.pick_section_from_condlist(db.actor, db.actor, self.on_reversed)
+		end
 		news_manager.send_task(db.actor, "reversed", tsk)
 	end
 	self.last_check_task = nil

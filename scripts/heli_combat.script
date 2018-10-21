@@ -81,7 +81,11 @@ end
 
 function heli_combat:is_enemy(obj)
 	--alun_utils.debug_write(strformat("heli_combat:is_enemy",obj and obj:name()))
-	if (obj:alive() ~= true) then 
+	if not (IsStalker(obj) or IsMonster(obj)) then 
+		return false 
+	end
+	
+	if not (obj:alive()) then 
 		return false 
 	end
 	
@@ -228,7 +232,7 @@ function heli_combat:find_valid_target()
 			end
 		end
 	
-		if (self:is_enemy(target)) then
+		if (target and self:is_enemy(target)) then
 			if (current_target and current_target_visible) then
 				local pos = self.object:position()
 				local dist = pos:distance_to_sqr(target_pos)
@@ -256,14 +260,7 @@ function heli_combat:read_custom_data( ini, section )
 	self.combat_use_mgun   = ini:r_bool_ex(section,"combat_use_mgun") or sys_ini:r_bool_ex(section,"combat_use_mgun",false)
 	self.actor_always_enemy   = ini:r_bool_ex(section,"actor_always_enemy") or sys_ini:r_bool_ex(section,"actor_always_enemy",false)
 	
-	--	self.combat_ignore     = utils.cfg_get_bool  ( ini, section, "combat_ignore",     self.object, false, false )
-
-	local combat_ignore    = ini:r_string_ex(section,"combat_ignore")
-	if combat_ignore then
-		self.combat_ignore = xr_logic.parse_condlist( self.object, section, "combat_ignore", combat_ignore )
-	else
-		self.combat_ignore = nil
-	end
+	self.combat_ignore = ini:r_string_to_condlist(section,"combat_ignore")
 
 	local combat_enemy = ini:r_string_ex(section,"combat_enemy")
 	self:set_enemy_from_custom_data( combat_enemy )
@@ -385,14 +382,14 @@ function heli_combat:save( packet )
 
 		packet:w_s16 (self.st.enemy_id)
 		packet:w_u32 (t - (self.enemy_last_seen_time or 0))
-		packet:w_vec3(self.enemy_last_seen_pos or vector())
+		packet:w_vec3(self.enemy_last_seen_pos or vector():set(0,0,0))
 
 		packet:w_u8(self.combat_type)
 
 		if self.combat_type == combat_type_search then
 			packet:w_u32 ((self.change_pos_time or 0) - t)
 			packet:w_bool(self.flight_direction or false)
-			packet:w_vec3(self.center_pos or vector())
+			packet:w_vec3(self.center_pos or vector():set(0,0,0))
 
 		elseif self.combat_type == combat_type_flyby then
 			packet:w_s16( self.flyby_states_for_one_pass )
@@ -408,21 +405,19 @@ function heli_combat:load( packet )
 	if self.initialized then
 		self.initialized = false -- fix heli freezing after game load
 		local t = time_global()
-		self.enemy_last_seen_pos  = vector()
 
 		self.st.enemy_id             = packet:r_s16()
 		self.enemy_last_seen_time = t - packet:r_u32()
-
+		self.enemy_last_seen_pos = vector():set(0,0,0)
 		packet:r_vec3(self.enemy_last_seen_pos)
 
 		self.combat_type          = packet:r_u8()
 
 		if self.combat_type == combat_type_search then
-			self.center_pos           = vector()
-
 			self.change_pos_time      = packet:r_u32() + t
 			self.flight_direction     = packet:r_bool()
-			packet:r_vec3( self.center_pos )
+			self.center_pos = vector():set(0,0,0)
+			packet:r_vec3(self.center_pos)
 
 		elseif self.combat_type == combat_type_flyby then
 			self.flyby_states_for_one_pass = packet:r_s16()
@@ -457,7 +452,7 @@ function heli_combat:forget_enemy()
 	--alun_utils.debug_write(strformat("heli_combat:forget_enemy"))
 	self.st.enemy_id = nil
 	self.enemy = nil
-	self.heliObject:LookAtPoint(vector(), false)
+	self.heliObject:LookAtPoint(VEC_Z, false)
 	self.heliObject:ClearEnemy()
 	self.initialized = false
 end
@@ -491,7 +486,7 @@ end
 
 -- нужно ли игнорировать врага
 function heli_combat:combat_ignore_check()
-	return self.combat_ignore ~= nil and xr_logic.pick_section_from_condlist( db.actor, self.object, self.combat_ignore ) ~= nil
+	return self.combat_ignore ~= nil and xr_logic.pick_section_from_condlist( db.actor, self.object, self.combat_ignore ) == "true"
 end
 
 -- Обновление боевой схемы. Вызывается из обновлений схем логики вертолёта.
@@ -673,7 +668,7 @@ function heli_combat:flyby_update( see_enemy )
 		self.flyby_initialized         = true
 		self.heliObject:SetMaxVelocity(self.max_velocity)
 		self.heliObject:SetSpeedInDestPoint(self.max_velocity)
-		self.heliObject:LookAtPoint(vector(),false)
+		self.heliObject:LookAtPoint(vector():set(0,0,0),false)
 		self.flyby_states_for_one_pass = 3
 		self.change_combat_type_allowed = false
 		self.state = flyby_state_to_enemy
@@ -712,7 +707,7 @@ function heli_combat:retreat_initialize()
 
 	self.heliObject:SetMaxVelocity( self.max_velocity )
 	self.heliObject:SetSpeedInDestPoint( self.max_velocity )
-	self.heliObject:LookAtPoint( vector(), false )
+	self.heliObject:LookAtPoint( VEC_Z, false )
 	self.heliObject:SetDestPosition( self:calc_position_in_radius( 5000 ) )
 end
 

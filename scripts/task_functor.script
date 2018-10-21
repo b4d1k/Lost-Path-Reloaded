@@ -438,7 +438,7 @@ end
 
 function target_condlist(task_id, field, cond_string)
 	local parsed_condlist = xr_logic.parse_condlist(nil, "task", "task_condlist", cond_string)
-	local value = xr_logic.pick_section_from_condlist(db.actor, nil, parsed_condlist)
+	local value = parsed_condlist and xr_logic.pick_section_from_condlist(db.actor, nil, parsed_condlist)
 	return value and get_story_object_id(value)
 end
 

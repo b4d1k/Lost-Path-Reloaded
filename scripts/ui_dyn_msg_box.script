@@ -87,6 +87,7 @@ function multi_choice:InitControls()
 	self.xml:ParseFile			("ui_dyn_msg_box.xml")
 
 	ctrl					= CUIWindow()
+	ctrl:SetAutoDelete(true)
 	self.xml:InitWindow			("multi_choice:file_item:main",0,ctrl)
 
 	self.file_item_main_sz	= vector2():set(ctrl:GetWidth(),ctrl:GetHeight())
@@ -237,6 +238,7 @@ function context_menu:InitControls()
 
 	-- these windows are just to get width/height from xml to be use for context item
 	local ctrl = CUIWindow()
+	ctrl:SetAutoDelete(true)
 	self.xml:InitWindow("context_menu:file_item:main",0,ctrl)
 
 	self.file_item_main_sz = vector2():set(ctrl:GetWidth(),ctrl:GetHeight())

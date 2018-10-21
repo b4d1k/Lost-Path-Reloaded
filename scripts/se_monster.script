@@ -42,17 +42,10 @@ function se_monster:STATE_Read(packet, size)
 	--alun_utils.debug_write("\nse_monster:STATE_Read "..self:name().." START")
 	cse_alife_monster_base.STATE_Read (self, packet, size)
 	if self.script_version > 10 then
-		if db.offline_objects[self.id] == nil then
-			db.offline_objects[self.id] = {}
-		end
-		local old_lvid = packet:r_stringZ()
-		if old_lvid ~= "nil" then
-			db.offline_objects[self.id].level_vertex_id = tonumber(old_lvid)
-		end
-		db.offline_objects[self.id].active_section = packet:r_stringZ()
-		if (db.offline_objects[self.id].active_section == "nil" or db.offline_objects[self.id].active_section == "") then
-			db.offline_objects[self.id].active_section = nil
-		end
+		db.offline_objects[self.id] = db.offline_objects[self.id] or {}
+		db.offline_objects[self.id].level_vertex_id = tonumber(packet:r_stringZ())
+		local v = packet:r_stringZ()
+		db.offline_objects[self.id].active_section = v ~= "nil" and v ~= "" and v or nil
 	end
 	--alun_utils.debug_write("se_monster:STATE_Read "..self:name().." END\n")
 end
@@ -107,7 +100,7 @@ function se_monster:on_unregister()
 	end
 	
 	db.offline_objects[self.id] = nil
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 	cse_alife_monster_base.on_unregister(self)
 end
 --------------------

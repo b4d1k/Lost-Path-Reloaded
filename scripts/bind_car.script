@@ -35,8 +35,8 @@ function car_binder:update(delta)
 	xr_sound.update(self.object:id())
 end
 
-function car_binder:net_spawn(data)
-	if not object_binder.net_spawn(self, data) then
+function car_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 	db.add_obj(self.object)

@@ -51,6 +51,7 @@ end
 local function squad_on_register(squad)
 	if (companion_squads[squad.id] ~= nil) then 
 		companion_squads[squad.id] = squad
+		squad:set_squad_relation("friend")
 		squad.scripted_target = "actor"
 	end
 	
@@ -101,11 +102,14 @@ end
 
 local function actor_on_item_drop(item)
 	if (ActorMenu.get_menu_mode() == 4) then 
-		local m_data = alife_storage_manager.get_state()
-		if not (m_data.companion_borrow_item) then
-			m_data.companion_borrow_item = {}
+		local npc = ActorMenu.get_actor_menu():GetPartner()
+		if (npc and npc:alive() and npc:has_info("npcx_is_companion")) then
+			local m_data = alife_storage_manager.get_state()
+			if not (m_data.companion_borrow_item) then
+				m_data.companion_borrow_item = {}
+			end
+			m_data.companion_borrow_item[item:id()] = true
 		end
-		m_data.companion_borrow_item[item:id()] = true
 	end
 end
 
@@ -191,22 +195,20 @@ end
 
 -- doesn't include task companions
 function get_companion_count()
-	local count = 0
-	for id,v in pairs(non_task_companions) do
-		count = count + 1
-	end
-	return count
+	return table.size(non_task_companions)
 end
 
 -- includes task companions too
 function list_actor_squad_by_id()
 	local t = {}
+	local size_t = 0
 	for id,squad in spairs(companion_squads, function(t,a,b) return a < b end) do 
 		if (squad and squad.commander_id) then
-			if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+			if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 				for k in squad:squad_members() do
 					--printf("member %s",k.id)
-					table.insert(t,k.id)
+					size_t = size_t + 1
+					t[size_t] = k.id
 				end
 			end
 		end
@@ -252,6 +254,10 @@ function add_to_actor_squad(npc)
 	utils.se_obj_save_var(id,npc:name(),"companion",true)
 	npc:inactualize_patrol_path()
 	setup_companion_logic(npc,db.storage[id],false)
+	
+	cycle_companions_combat_mode(_current_combat_mode)
+	cycle_companions_move_mode(_current_move_mode)
+	cycle_companions_stealth_mode(_current_stealth_mode)
 end
 
 function remove_from_actor_squad(npc)
@@ -261,10 +267,11 @@ function remove_from_actor_squad(npc)
 		companion_squads[squad.id] = nil
 	end
 	
+	stalker_generic.remove_level_spot(npc:id())
 	non_task_companions[npc:id()] = nil
 	npc:disable_info_portion("npcx_is_companion")
 	npc:disable_info_portion("npcx_beh_cannot_dismiss")
-	axr_logic.restore_scheme_and_logic(npc)
+	xr_logic.restore_scheme_and_logic(npc)
 	
 	local se_obj = alife_object(npc:id())
 	if not (se_obj) then 
@@ -282,6 +289,7 @@ function remove_all_from_actor_squad()
 			for k in squad:squad_members() do 
 				local se_obj = k.object or alife():object(k.id)
 				if (se_obj) then 
+					stalker_generic.remove_level_spot(se_obj.id)
 					squad.scripted_target = nil
 					utils.se_obj_save_var(se_obj.id,se_obj:name(),"companion",nil)
 					utils.se_obj_save_var(se_obj.id,se_obj:name(),"companion_cannot_dismiss",nil)
@@ -291,7 +299,7 @@ function remove_all_from_actor_squad()
 					if (member) then 
 						member:disable_info_portion("npcx_is_companion")
 						member:disable_info_portion("npcx_beh_cannot_dismiss")
-						axr_logic.restore_scheme_and_logic(member)
+						xr_logic.restore_scheme_and_logic(member)
 					end
 				end
 			end
@@ -300,6 +308,7 @@ function remove_all_from_actor_squad()
 	end
 
 	for id,b in pairs(non_task_companions) do
+		stalker_generic.remove_level_spot(id)
 		non_task_companions[id] = nil
 	end
 end
@@ -429,7 +438,7 @@ function cycle_companions_combat_mode(force_mode)
 	if (f) then 
 		for id,squad in pairs(companion_squads) do 
 			if (squad and squad.commander_id) then
-				if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+				if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 					for k in squad:squad_members() do
 						local member = db.storage[k.id] and db.storage[k.id].object
 						if (member and member:alive()) then
@@ -459,7 +468,7 @@ function cycle_companions_move_mode(force_mode)
 	if (f) then 
 		for id,squad in pairs(companion_squads) do 
 			if (squad and squad.commander_id) then
-				if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+				if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 					for k in squad:squad_members() do
 						st = db.storage[k.id]
 						if (k.id == squad:commander_id()) then 
@@ -479,10 +488,10 @@ function cycle_companions_move_mode(force_mode)
 end 
 
 function cycle_companions_stealth_mode()
-	for id,squad in pairs(axr_companions.companion_squads) do 
+	for id,squad in pairs(companion_squads) do 
 		if (squad and squad.commander_id) then
 			for k in squad:squad_members() do
-				if not (xrs_kill_wounded.hostage_list[k.id]) then
+				if not (axr_task_manager.hostages_by_id[k.id]) then
 					st = db.storage[k.id]
 					local member = st and st.object
 					if (member and member:alive()) then
@@ -520,14 +529,14 @@ function move_to_point(p)
 		_particle_valid = particles_object("_samples_particles_\\flash_light")
 		_particle_invalid = particles_object("_samples_particles_\\flash_light_red")
 	elseif (p==2) then
-		if (_particle_valid) then
+		if (_particle_valid and _particle_invalid) then
 			local r = level.get_target_dist and level.get_target_dist()
 			if (r) then
 				local pos = vector():set(device().cam_pos)
-				pos:add(device().cam_dir:mul(r))
+				pos:add(vector():set(device().cam_dir):mul(r))
 				
 				local lvid = level.vertex_id(pos)
-				local npc = lvid and lvid < 4294967295 and get_test_member()
+				local npc = lvid and level.valid_vertex(lvid) and get_test_member()
 				if (npc and npc:accessible(pos)) then 
 					if (_particle_invalid:playing()) then 
 						_particle_invalid:stop()
@@ -542,49 +551,51 @@ function move_to_point(p)
 			end
 		end	
 	else
-		if (_particle_valid:playing()) then
-			_particle_valid:stop()
-		end
-		_particle_valid = nil
-		
-		if (_particle_invalid:playing()) then 
-			_particle_invalid:stop()
-		end 
-		_particle_invalid = nil
-		
-		local r = level.get_target_dist and level.get_target_dist()
-		if (r) then
-			local pos = vector():set(device().cam_pos)
-			pos:add(device().cam_dir:mul(r))
-		
-			local lvid = level.vertex_id(pos)
-				
-			_current_move_mode = 1
-			SetHudMsg(game.translate_string("st_move_to_point"),8)
-			for id,squad in pairs(companion_squads) do 
-				if (squad and squad.commander_id) then
-					if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
-						for k in squad:squad_members() do
-							st = db.storage[k.id]
-							local member = st and st.object
-							if (member and member:alive()) then
-								set_companion_to_follow_state(member)
-								if (lvid and lvid >= 4294967295) then
-									lvid = nil
-								end
-								utils.save_var(member,"fight_from_point",lvid)
-							end
-							if (k.id == squad:commander_id()) then
-								if (st and st.beh) then
-									if (lvid) then 
-										if (lvid >= 4294967295) then
-											lvid = nil
-										end
-										if not (member:accessible(lvid)) then
-											lvid = member:accessible_nearest(level.vertex_position(lvid),vector())
-										end
+		if (_particle_valid and _particle_invalid) then
+			if (_particle_valid:playing()) then
+				_particle_valid:stop()
+			end
+			_particle_valid = nil
+			
+			if (_particle_invalid:playing()) then 
+				_particle_invalid:stop()
+			end 
+			_particle_invalid = nil
+			
+			local r = level.get_target_dist and level.get_target_dist()
+			if (r) then
+				local pos = vector():set(device().cam_pos)
+				pos:add(vector():set(device().cam_dir):mul(r))
+			
+				local lvid = level.vertex_id(pos)
+					
+				_current_move_mode = 1
+				SetHudMsg(game.translate_string("st_move_to_point"),8)
+				for id,squad in pairs(companion_squads) do 
+					if (squad and squad.commander_id) then
+						if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
+							for k in squad:squad_members() do
+								st = db.storage[k.id]
+								local member = st and st.object
+								if (member and member:alive()) then
+									set_companion_to_follow_state(member)
+									if (lvid and not level.valid_vertex(lvid)) then
+										lvid = nil
 									end
-									st.beh.rally_lvid = lvid
+									utils.save_var(member,"fight_from_point",lvid)
+								end
+								if (k.id == squad:commander_id()) then
+									if (st and st.beh) then
+										if (lvid) then 
+											if not (level.valid_vertex(lvid)) then
+												lvid = nil
+											end
+											if (lvid and not member:accessible(lvid)) then
+												lvid = member:accessible_nearest(level.vertex_position(lvid),vector():set(0,0,0))
+											end
+										end
+										st.beh.rally_lvid = lvid
+									end
 								end
 							end
 						end
@@ -601,7 +612,7 @@ function set_companion_squad_move_mode(mode,npc,squad)
 	if (f) then
 		squad = squad or get_object_squad(npc)
 		if (squad and squad.commander_id) then
-			if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+			if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 				for k in squad:squad_members() do
 					st = db.storage[k.id]
 					if (k.id == squad:commander_id()) then 
@@ -625,7 +636,7 @@ function set_companion_squad_combat_mode(mode,npc,squad)
 	if (f) then 
 		squad = squad or get_object_squad(npc)
 		if (squad and squad.commander_id) then
-			if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+			if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 				for k in squad:squad_members() do
 					local member = db.storage[k.id] and db.storage[k.id].object
 					if (member and member:alive()) then
@@ -640,7 +651,7 @@ end
 function set_companion_squad_stealth_mode(mode,npc,squad)
 	squad = squad or get_object_squad(npc)
 	if (squad and squad.commander_id) then
-		if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+		if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 			for k in squad:squad_members() do
 				local member = db.storage[k.id] and db.storage[k.id].object
 				if (member and member:alive()) then
@@ -658,7 +669,7 @@ end
 function set_companion_squad_distance_mode(mode,npc,squad)
 	squad = squad or get_object_squad(npc)
 	if (squad and squad.commander_id) then
-		if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+		if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 			for k in squad:squad_members() do
 				local member = db.storage[k.id] and db.storage[k.id].object
 				if (member and member:alive()) then
@@ -676,7 +687,7 @@ end
 function set_companion_squad_gather_mode(mode,npc,squad)
 	squad = squad or get_object_squad(npc)
 	if (squad and squad.commander_id) then
-		if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+		if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 			for k in squad:squad_members() do
 				local member = db.storage[k.id] and db.storage[k.id].object
 				if (member and member:alive()) then
@@ -694,7 +705,7 @@ end
 function set_companion_squad_loot_mode(mode,npc,squad)
 	squad = squad or get_object_squad(npc)
 	if (squad and squad.commander_id) then
-		if not (xrs_kill_wounded.hostage_list[squad:commander_id()]) then
+		if not (axr_task_manager.hostages_by_id[squad:commander_id()]) then
 			for k in squad:squad_members() do
 				local member = db.storage[k.id] and db.storage[k.id].object
 				if (member and member:alive()) then
@@ -708,3 +719,49 @@ function set_companion_squad_loot_mode(mode,npc,squad)
 		end
 	end
 end
+
+--------------------------------
+-- keybinding
+--------------------------------
+axr_keybind.bind("kCUSTOM1",function(p)
+	if (p==1) then 
+		cycle_companions_combat_mode()
+	end
+end)
+
+axr_keybind.bind("kCUSTOM2",function(p)
+	if (p==1) then 
+		cycle_companions_move_mode()
+	end
+end)
+
+axr_keybind.bind("kCUSTOM3",function(p)
+	move_to_point(p)
+end)
+
+axr_keybind.bind("kCUSTOM4",function(p)
+	if not (p==1) then
+		return 
+	end
+	cycle_companions_stealth_mode()
+end)
+
+axr_keybind.bind("kCUSTOM5",function(p)
+	if not (p==1) then
+		return 
+	end
+	for id,squad in pairs(companion_squads) do 
+		if (squad and squad.commander_id) then
+			for k in squad:squad_members() do
+				if not (axr_task_manager.hostages_by_id[k.id]) then
+					st = db.storage[k.id]
+					local member = st and st.object
+					if (member and member:alive()) then
+						switch_companion_gather_items(member)
+						switch_companion_loot_corpses(member)
+					end
+				end
+			end
+		end
+	end
+end)

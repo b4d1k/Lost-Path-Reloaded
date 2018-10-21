@@ -1,5 +1,5 @@
-local function actor_on_item_take(obj)
-
+local ammos = {}
+function aggregate(npc,obj)
 	if not (IsAmmo(obj)) then
 		return 
 	end 
@@ -11,14 +11,17 @@ local function actor_on_item_take(obj)
 		return 
 	end
 
-	local ammos = {}
+	iempty_table(ammos)
+	local size_t = 0
+	
 	local section = obj:section()
 	
-	db.actor:inventory_for_each(
+	npc:inventory_for_each(
 		function (item)
 			-- collect ammos except this one; we use it for remainder
 			if (section == item:section() and item:id() ~= obj:id() and item:ammo_get_count() < box_size) then
-				table.insert(ammos,item:id())
+				size_t = size_t + 1
+				ammos[size_t] = item:id()
 				size = size + item:ammo_get_count()
 			end
 		end
@@ -33,8 +36,9 @@ local function actor_on_item_take(obj)
 	local remainder = size - (box_size*fill)
 	if (remainder > 0) then 
 		obj:ammo_set_count(remainder)
-	else 
-		table.insert(ammos,obj:id())
+	else
+		size_t = size_t + 1
+		ammos[size_t] = obj:id()
 	end
 	
 	local sim = alife()
@@ -45,15 +49,17 @@ local function actor_on_item_take(obj)
 				item:ammo_set_count(box_size)
 				fill = fill - 1
 			else
-				db.actor:drop_item(item)
 				local se_obj = sim:object(ammos[i])
 				if (se_obj) then
-					--printf("release %s",se_obj:name())
 					sim:release(se_obj)
 				end
 			end
 		end
 	end
+end
+
+function actor_on_item_take(item)
+	aggregate(db.actor,item)
 end
 
 function on_game_start()

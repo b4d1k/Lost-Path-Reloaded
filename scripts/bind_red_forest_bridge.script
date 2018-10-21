@@ -14,8 +14,8 @@ function bridge_binder:__init(obj) super(obj)
 	self.se_koleso_id = se_koleso and se_koleso.id
 --	printf("koleso = [%s]", tostring(self.se_koleso_id))
 end
-function bridge_binder:net_spawn(server_object)
-	if not object_binder.net_spawn(self, server_object) then
+function bridge_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 	self.object:set_callback(callback.script_animation, self.animation_end_callback, self)

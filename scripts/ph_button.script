@@ -26,8 +26,8 @@ function ph_button:try_switch()
 	local st = db.storage[self.object:id()]
 	if st.active_scheme and st.active_scheme == "ph_button" and self.st.on_press then
 		--if xr_logic.try_switch_to_another_section(obj, self.st, db.actor) then
-		if xr_logic.switch_to_section(self.object, self.st.ini,
-		   xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.on_press.condlist)) then
+		local result = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.on_press.condlist)
+		if (result and xr_logic.switch_to_section(self.object, self.st.ini, result)) then
 			return true
 		end
 	end

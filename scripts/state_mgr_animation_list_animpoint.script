@@ -61,6 +61,18 @@ function add_animation_list()
 												[1]	= {	"animpoint_sit_low_idle_rnd_1", "animpoint_sit_low_idle_rnd_2", "animpoint_sit_low_idle_rnd_3", "animpoint_sit_low_idle_rnd_4" }
 												}},
 
+		animpoint_sit		= {	prop	= { maxidle = 5,
+												sumidle = 3,
+												rnd = 80,
+												moving = true },
+									into	= nil,
+									out		= nil,
+									idle	= { [0]	= "sit_0_idle_0",
+												[1]	= "sit_0_idle_0" },
+									rnd		= {	[0]	= {	"sit_0_idle_1", "sit_0_idle_2", "sit_0_idle_3" },
+												[1]	= {	"sit_0_idle_1", "sit_0_idle_2", "sit_0_idle_3" }
+												}},
+												
 		animpoint_sit_ass		= {	prop	= { maxidle = 5,
 												sumidle = 3,
 												rnd = 80,
@@ -591,10 +603,10 @@ function add_animation_list()
 									sumidle = 0,
 									rnd = 100,
 									moving = true  },
-						into	= { [0]	= {"animpoint_sit_normal_guitar_in_1", {a="guitar_a"}, {f=sr_camp.start_guitar}, "animpoint_sit_normal_guitar_in_2" },
-									[1]	= {"animpoint_sit_normal_guitar_in_1", {a="guitar_a"}, {f=sr_camp.start_guitar}, "animpoint_sit_normal_guitar_in_2" } },
-						out		= { [0]	= {"animpoint_sit_normal_guitar_out_1", {d="guitar_a"}, "animpoint_sit_normal_guitar_out_2"},
-									[1]	= {"animpoint_sit_normal_guitar_out_1", {d="guitar_a"}, "animpoint_sit_normal_guitar_out_2"} },
+						into	= { [0]	= {"animpoint_sit_normal_guitar_in_1", {a="guitar_a2"}, {f=sr_camp.start_guitar}, "animpoint_sit_normal_guitar_in_2" },
+									[1]	= {"animpoint_sit_normal_guitar_in_1", {a="guitar_a2"}, {f=sr_camp.start_guitar}, "animpoint_sit_normal_guitar_in_2" } },
+						out		= { [0]	= {"animpoint_sit_normal_guitar_out_1", {d="guitar_a2"}, "animpoint_sit_normal_guitar_out_2"},
+									[1]	= {"animpoint_sit_normal_guitar_out_1", {d="guitar_a2"}, "animpoint_sit_normal_guitar_out_2"} },
 						idle	= { [0]	= "animpoint_sit_normal_guitar_idle_1",
 									[1]	= "animpoint_sit_normal_guitar_idle_1" },
 						rnd		= { [0] = {"animpoint_sit_normal_guitar_idle_rnd_1" },
@@ -605,28 +617,15 @@ function add_animation_list()
 									sumidle = 0,
 									rnd = 100,
 									moving = true },
-						into	= { [0]	= {"animpoint_sit_low_guitar_in_1", {a="guitar_a"}, {f=sr_camp.start_guitar}, "animpoint_sit_low_guitar_in_2" },
-									[1]	= {"animpoint_sit_low_guitar_in_1", {a="guitar_a"}, {f=sr_camp.start_guitar}, "animpoint_sit_low_guitar_in_2" } },
-						out		= { [0]	= {"animpoint_sit_low_guitar_out_1", {d="guitar_a"}, "animpoint_sit_low_guitar_out_2"},
-									[1]	= {"animpoint_sit_low_guitar_out_1", {d="guitar_a"}, "animpoint_sit_low_guitar_out_2"} },
+						into	= { [0]	= {"animpoint_sit_low_guitar_in_1", {a="guitar_a2"}, {f=sr_camp.start_guitar}, "animpoint_sit_low_guitar_in_2" },
+									[1]	= {"animpoint_sit_low_guitar_in_1", {a="guitar_a2"}, {f=sr_camp.start_guitar}, "animpoint_sit_low_guitar_in_2" } },
+						out		= { [0]	= {"animpoint_sit_low_guitar_out_1", {d="guitar_a2"}, "animpoint_sit_low_guitar_out_2"},
+									[1]	= {"animpoint_sit_low_guitar_out_1", {d="guitar_a2"}, "animpoint_sit_low_guitar_out_2"} },
 						idle	= { [0]	= "animpoint_sit_low_guitar_idle_1",
 									[1]	= "animpoint_sit_low_guitar_idle_1" },
 						rnd		= { [0] = {"animpoint_sit_low_guitar_idle_rnd_2" },
 									[1] = {"animpoint_sit_low_guitar_idle_rnd_2" }
 									}},
-
-		animpoint_sit_ass_guitar	= {	prop	= { maxidle = 3,
-									sumidle = 3,
-									rnd = 80 },
-						into	= { [0]	= {"sit_1_guitar_0_0", {a="guitar_a"}, {f=sr_camp.start_guitar}, "sit_1_guitar_0_1"},
-						            [1]	= {"sit_1_guitar_0_0", {a="guitar_a"}, {f=sr_camp.start_guitar}, "sit_1_guitar_0_1"} },
-						out		= { [0]	= {"guitar_0_sit_1_0", {d="guitar_a"}, "guitar_0_sit_1_1"},
-									[1]	= {"guitar_0_sit_1_0", {d="guitar_a"}, "guitar_0_sit_1_1"} },
-						idle	= { [0]	= "guitar_0",
-									[1]	= "guitar_0" },
-						rnd		= nil },
-
-
 
 		animpoint_stay_wall_harmonica		= {	prop	= { maxidle = 5,
 									sumidle = 3,
@@ -687,28 +686,5 @@ function add_animation_list()
 						idle	= { [0]	= "animpoint_sit_low_harmonica_idle_1",
 									[1]	= "animpoint_sit_low_harmonica_idle_1" },
 						rnd		= nil },
-
-		animpoint_sit_ass_harmonica	= {	prop	= { maxidle = 3,
-									sumidle = 3,
-									rnd = 80 },
-						into	= { [0]	= {"sit_2_harmonica_1_0", {a="harmonica_a"}, {f=sr_camp.start_harmonica}, "sit_2_harmonica_1_1"},
-						            [1]	= {"sit_2_harmonica_1_0", {a="harmonica_a"}, {f=sr_camp.start_harmonica}, "sit_2_harmonica_1_1"} },
-						out		= { [0]	= {"harmonica_1_sit_2_0", {d="harmonica_a"}, "harmonica_1_sit_2_1"},
-						            [1]	= {"harmonica_1_sit_2_0", {d="harmonica_a"}, "harmonica_1_sit_2_1"} },
-						idle	= { [0]	= "harmonica_0",
-						            [1]	= "harmonica_0" },
-						rnd		= nil }
 	}
-
-
-
-
-
-
-
-
-
-
-
-
 end

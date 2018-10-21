@@ -93,10 +93,10 @@ function eva_turn_on_campfire:find_valid_target()
 	end
 	
 	local tg = time_global()
-	self.st.__dtimer = not self.st.__dtimer and tg + 5000 or self.st.__dtimer
-	if (tg < self.st.__dtimer) then 
+	if (self.st.__dtimer and tg < self.st.__dtimer) then 
 		return false
-	end 
+	end
+	self.st.__dtimer = tg + 5000
 	
 	local smart = xr_gulag.get_npc_smart(npc)
 
@@ -110,8 +110,10 @@ function eva_turn_on_campfire:find_valid_target()
 		return false
 	end
 
-	if (npc_info.job.exclusive and xr_logic.pick_section_from_condlist(db.actor, npc, self.st.allow) == "false") then
-		return false
+	if (npc_info.job.exclusive) then 
+		if (self.st.allow == nil or xr_logic.pick_section_from_condlist(db.actor, npc, self.st.allow) ~= "true") then
+			return false
+		end
 	end
 
 	local campfires = db.campfire_table_by_smart_names[smart:name()]
@@ -192,7 +194,6 @@ function act_turn_on_campfire:initialize()
 	local npc = self.object
 	npc:set_desired_position()
 	npc:set_desired_direction()
-	npc:set_path_type(game_object.level_path)
 	self.st.vid = utils.send_to_nearest_accessible_vertex(npc,self.st.vid,"turn_on_campfire")
 	state_mgr.set_state(npc,self.st.state or "patrol")
 	action_base.initialize(self)
@@ -261,7 +262,6 @@ function add_to_binder(npc,char_ini,scheme,section,st,temp)
 	temp.action:add_precondition(wp(stalker_ids.property_alive,true))
 	temp.action:add_precondition(wp(stalker_ids.property_enemy,false))
 	temp.action:add_precondition(wp(stalker_ids.property_danger,false))
-	temp.action:add_precondition(wp(stalker_ids.property_anomaly,false))
 
 	temp.action:add_effect(wp(evaid, false))
 	manager:add_action(actid,temp.action)
@@ -301,7 +301,7 @@ end
 
 function reset_generic_scheme(npc,scheme,section,stype,st)
 	if (st.turn_on_campfire) then
-		st.turn_on_campfire.allow = xr_logic.parse_condlist(npc, section, "turn_on_campfire", st.ini:r_string_ex(section,"turn_on_campfire") or "false")
+		st.turn_on_campfire.allow = st.ini:r_string_to_condlist(section,"turn_on_campfire")
 		eval_reset(st.turn_on_campfire)
 	end
 end

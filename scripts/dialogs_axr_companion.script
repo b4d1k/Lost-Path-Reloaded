@@ -251,6 +251,17 @@ function is_actor_friend(actor,npc)
 	if not (squad) then
 		return false
 	end
+	
+	-- actor can only recruit one rank level above or below
+	local one_rank_above = ranks.get_next_rank_name(ranks.get_obj_rank_name(actor))
+	local npc_rank = ranks.get_obj_rank_name(npc)
+	
+	if (one_rank_above ~= npc_rank) then
+		local low,high = ranks.get_rank_interval(one_rank_above)
+		if (npc:character_rank() > high) then 
+			return false
+		end
+	end
 
 	if not (axr_companions.allow_simulation_squads_as_companions) then
 		return false

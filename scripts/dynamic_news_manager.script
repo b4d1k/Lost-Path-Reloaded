@@ -111,12 +111,12 @@ function DynamicNewsManager:NewsTick()
 		return false
 	end
 	
-	local c
-	for k,v in pairs(self.queue) do
-		c = #v
-		if (c > 0) then
-			dynamic_news_helper.send_tip(v[c].Mg,v[c].Se, nil, nil,v[c].Ic,v[c].Snd,v[c].It)
-			v[c] = nil
+	for ch,messages in pairs(self.queue) do
+		local c = #messages
+		local message = messages[c]
+		if (message) then
+			dynamic_news_helper.send_tip(message.Mg,message.Se, nil, nil,message.Ic,message.Snd,message.It)
+			messages[c] = nil
 			return false
 		end
 	end
@@ -221,14 +221,19 @@ function DynamicNewsManager:npc_on_hear_callback(npc,who_id,s_type,sound_dist,so
 end
 
 ------------------------ utility
-function DynamicNewsManager:PushToChannel(name,t)
-	if (self.queue[name]) then
+function DynamicNewsManager:PushToChannel(name,t,fifo)
+	local q = self.queue[name]
+	if (q) then
 		if (t.Mg) then 
 			for s in string.gmatch(t.Mg,"(st_dyn_news_ch_[%w%d_]*)") do
 				t.Mg = string.gsub(t.Mg,s,game.translate_string(s))
 			end
 		end
-		table.insert(self.queue[name],t)
+		if (fifo) then
+			q[#q+1] = t
+		else
+			table.insert(q,1,t)
+		end
 	end
 end 
 
@@ -265,7 +270,7 @@ function DynamicNewsManager:FindSpeaker(victim,who,same_as_victim,same_as_who,no
 	for i=1, #db.OnlineStalkers do
 		if (db.OnlineStalkers[i] ~= who_id) then
 			local st = db.storage[db.OnlineStalkers[i]]
-			local npc = st and st.object or level.object_by_id(db.OnlineStalkers[i])
+			local npc = st and st.object
 			if (npc and IsStalker(npc,npc:clsid()) and npc:alive() and not get_object_story_id(db.OnlineStalkers[i])) then
 				if (not_in_combat == nil) or (not_in_combat == true and not npc:best_enemy()) or (not_in_combat ~= true) then
 					comm_sender = npc:character_community()
@@ -294,7 +299,7 @@ function DynamicNewsManager:FindSpeakerWithEnemy(victim,who,same_as_victim,same_
 	for i=1, #db.OnlineStalkers do
 		if (db.OnlineStalkers[i] ~= who_id) then
 			local st = db.storage[db.OnlineStalkers[i]]
-			local npc = st and st.object or level.object_by_id(db.OnlineStalkers[i])
+			local npc = st and st.object
 			if (npc and IsStalker(npc,npc:clsid()) and npc:alive() and not get_object_story_id(db.OnlineStalkers[i]) and npc:best_enemy()) then
 				comm_sender = npc:character_community()
 				if (same_as_victim == nil) or (same_as_victim == true and comm_sender == comm) or (same_as_victim == false and comm_sender ~= comm) then
@@ -325,7 +330,7 @@ function DynamicNewsManager:GossipBounty()
 		end
 	end
 	
-	if not (bounty) then
+	if not (bounty and bounty:alive()) then
 		return false
 	end
 
@@ -677,7 +682,7 @@ function DynamicNewsManager:SOSDeathByMutant(victim,who)
 	local Se = strformat("%s, %s",sender:character_name(),dynamic_news_helper.GetCommunityDescription(sender,6))
 	
 	local a = dynamic_news_helper.GetCommunityDescription(sender,math.random(11,14))
-	local b = dynamic_news_helper.GetMonsterDescription(who,math.random(2,6))
+	local b = dynamic_news_helper.GetMonsterDescription(who,math.random(2,5))
 	local c = dynamic_news_helper.GetPointDescription(victim)
 
 	local msg = strformat("%s %s %s!",a,b,c)
@@ -806,8 +811,8 @@ end
 
 function DynamicNewsManager:GossipTaskRepeatTimeout(task_id)
 	local story_id = task_id:sub(1,-8)
-	local se_obj = get_story_object(story_id)
-	if not (se_obj) then 
+	local obj = get_story_object(story_id)
+	if not (obj) then 
 		return false 
 	end
 	
@@ -833,7 +838,7 @@ function DynamicNewsManager:GossipTaskRepeatTimeout(task_id)
 		return false
 	end
 
-	local msg = strformat(sentences[math.random(#sentences)],se_obj:character_name())
+	local msg = strformat(sentences[math.random(#sentences)],obj:character_name())
 	self:PushToChannel(sender:character_community(),{Mg=msg,Ic=sender:character_icon(),Snd="news",Se=Se,It="npc"})	
 end
 
@@ -884,3 +889,4 @@ function DynamicNewsManager:BuildSentenceStalkerEnemy(victim,who,mn,mx)
 
 	return sentences[math.random(#sentences)], dynamic_news_helper.GetCommunityDescription(who,math.random(7,8))
 end
+

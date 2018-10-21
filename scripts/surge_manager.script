@@ -134,17 +134,8 @@ function CSurgeManager:initialize()
 	self:init_surge_covers()
 
 	local ini = self.ini
-	local cond_string = "true"
-	if(ini:line_exist("settings", "condlist")) then
-		cond_string = ini:r_string_ex("settings", "condlist")
-	end
-	self.condlist = xr_logic.parse_condlist(nil, "surge_manager", "condlist", cond_string)
-
-	cond_string = "false"
-	if(ini:line_exist("settings", "survive")) then
-		cond_string = ini:r_string_ex("settings", "survive")
-	end
-	self.survive = xr_logic.parse_condlist(nil, "surge_manager", "survive_condlist", cond_string)
+	self.condlist = ini:r_string_to_condlist("settings","condlist")
+	self.survive = ini:r_string_to_condlist("settings","survive")
 
 	self.surge_message = ""
 	self.surge_task_sect = ""
@@ -177,8 +168,9 @@ function CSurgeManager:start(manual)
 		return
 	end
 	
-	if (level_name == "l13_generators" or level_name == "l11_hospital") then
-		self.skip_message = false
+	-- Generators is emission source and Deserted Hospital has nowhere to hide (almost all the map is inside anyway).
+	if (level_name == "l13_generators" or level_name == "l11_hospital" or has_alife_info("bar_arena_fight")) then
+		self.skip_message = true
 		self:skip_surge()
 		return
 	end
@@ -233,6 +225,9 @@ function CSurgeManager:new_surge_time(reset)
 end
 
 function CSurgeManager:skip_surge()
+	if (self.started) then 
+		xr_statistic.inc_counter("surges")
+	end
 	if not (self.inited_time) then 
 		self.inited_time = game.get_game_time()
 	end
@@ -269,7 +264,6 @@ function CSurgeManager:skip_surge()
 	self:toggle_level_artefact_respawns()
 	self:respawn_artefacts_and_replace_anomaly_zone()
 	
-	xr_statistic.inc_counter("surges")
 	if not (self.skip_message) and (atmosfear_options.config:r_value("atmosfear_current_parameters","opt_enable_blowout",2,1)==1) then
 		news_manager.send_tip(db.actor, "st_surge_while_asleep", nil, "recent_surge", nil, nil)
 		self.skip_message = true
@@ -366,10 +360,13 @@ function CSurgeManager:pos_in_cover(pos)
 	end
 	local sr
 	for name,condlist in pairs(self.covers) do 
-		sr = db.zone_by_name[name]
-		if (sr and sr:inside(pos)) then 
-			return true 
+		if (db.actor_inside_zones[name]) then 
+			return true
 		end
+		-- sr = db.zone_by_name[name]
+		-- if (sr and sr:inside(pos)) then 
+			-- return true 
+		-- end
 	end
 	return false
 end 
@@ -382,7 +379,7 @@ function CSurgeManager:init_surge_covers()
 	local ini = self.ini
 	for i = 0, ini:line_count("list")-1 do
 		temp1, id, temp2 = ini:r_line("list", i, "", "")
-		self.covers[id] = ini:line_exist(id, "condlist") and xr_logic.parse_condlist(db.actor, id, "condlist", ini:r_string_ex(id, "condlist") or "true") or true
+		self.covers[id] = ini:r_string_to_condlist(id,"condlist") or xr_logic.parse_condlist(nil,"surge_manager","covers","true")
 	end
 end
 
@@ -408,7 +405,7 @@ function CSurgeManager:calculate_best_surge_cover()
 	for name,condlist in pairs(self.covers) do
 		local zone = db.zone_by_name[name]
 		if (zone) then
-			local valid = type(condlist) == "boolean" or xr_logic.pick_section_from_condlist(db.actor, nil, condlist) ~= "false"
+			local valid = xr_logic.pick_section_from_condlist(db.actor, nil, condlist) == "true"
 			if (valid) then
 				dist = zone:position():distance_to_sqr(db.actor:position())
 				if (near_dist == nil or dist < near_dist) then 
@@ -438,11 +435,12 @@ function CSurgeManager:update()
 	if not (self.first_update) then 
 		self.first_update = true
 		local level_name = level.name()
-		if (level_name == "l11_hospital" or level_weathers.valid_levels[level_name] ~= true) then
+		if (level_name == "l13_generators" or level_name == "l11_hospital"
+		or has_alife_info("bar_arena_fight") or level_weathers.valid_levels[level_name] ~= true) then
 			if (self.started) then
 				self:end_surge()
-			else
-				self:skip_surge()
+			-- else
+				-- self:skip_surge()
 			end
 			return
 		end
@@ -465,7 +463,7 @@ function CSurgeManager:update()
 		if(g_time:diffSec(self.last_surge_time) < self._delta) then
 			return
 		end
-		if(xr_logic.pick_section_from_condlist(db.actor, nil, self.condlist) ~= "true") then
+		if (self.condlist and xr_logic.pick_section_from_condlist(db.actor, nil, self.condlist) == "false") then
 			return
 		end
 		self:start()
@@ -474,8 +472,12 @@ function CSurgeManager:update()
 	
 	local diff_sec = math.ceil(game.get_game_time():diffSec(self.inited_time)/level.get_time_factor())
 	if (diff_sec >= self.surge_time) then 
-		self:end_surge()
-		return
+		if (utils.load_var(db.actor,"surge_immuned",false) ~= true) then -- special surged immuned for tasks
+			self:end_surge()
+			return
+		else 
+			self:start(true)
+		end
 	end
 	
 	local diff_game_sec = math.ceil(game.get_game_time():diffSec(self.inited_time)/2)
@@ -535,8 +537,11 @@ function CSurgeManager:update()
 				end
 				self:launch_rockets()
 
-				if (atmosfear_options.config:r_value("atmosfear_current_parameters","opt_blowout_task",0,"give")=="give") then
-					self:give_surge_hide_task()
+				if (utils.load_var(db.actor,"surge_immuned",false) ~= true) then -- special surged immuned for tasks
+					printf("opt_blowout_task",atmosfear_options.config:r_value("atmosfear_current_parameters","opt_blowout_task",0,"give"))
+					if (atmosfear_options.config:r_value("atmosfear_current_parameters","opt_blowout_task",0,"give")=="give") then
+						self:give_surge_hide_task()
+					end
 				end
 				self.task_given = true
 				--self.debugMessages[2]:SetText("task given at: "..tostring(diff_sec))
@@ -615,51 +620,54 @@ function CSurgeManager:update()
 			self.stages['quake100']=true
 			--self.debugMessages[2]:SetText("quake100 at: "..tostring(diff_sec))
 		end
-		-- 1st wave sound -----------------------------------------------------------------------------------------------------------------------------------------
-		if(diff_sec>=108) and (self.stages['1stwavesnd']==nil)  then
-			--xr_sound.set_sound_play(db.actor:id(), "blowout_wave_1")
-			if rnd_sound==1 then
-				self:play_blowout_sound("wave01")
-			elseif rnd_sound==2 then
-				self:play_blowout_sound("wave02")
-			elseif rnd_sound==3 then
-				self:play_blowout_sound("wave03")
-			elseif rnd_sound==4 then
-				self:play_blowout_sound("wave04")
+		
+		if (utils.load_var(db.actor,"surge_immuned",false) ~= true) then -- special surged immuned for tasks
+			-- 1st wave sound -----------------------------------------------------------------------------------------------------------------------------------------
+			if(diff_sec>=108) and (self.stages['1stwavesnd']==nil)  then
+				--xr_sound.set_sound_play(db.actor:id(), "blowout_wave_1")
+				if rnd_sound==1 then
+					self:play_blowout_sound("wave01")
+				elseif rnd_sound==2 then
+					self:play_blowout_sound("wave02")
+				elseif rnd_sound==3 then
+					self:play_blowout_sound("wave03")
+				elseif rnd_sound==4 then
+					self:play_blowout_sound("wave04")
+				end
+				self.stages['1stwavesnd']=true
+				--self.debugMessages[2]:SetText("1st wave snd at: "..tostring(diff_sec).." rnd: "..tostring(rnd_sound))
 			end
-			self.stages['1stwavesnd']=true
-			--self.debugMessages[2]:SetText("1st wave snd at: "..tostring(diff_sec).." rnd: "..tostring(rnd_sound))
-		end
-		-- 1st wave -----------------------------------------------------------------------------------------------------------------------------------------
-		if(diff_sec>=120) and (self.stages['1stwave']==nil)  then
-			self:start_wave(1,diff_game_sec)
-			self.stages['1stwave']=true
-			--self.debugMessages[2]:SetText("1st wave at: "..tostring(diff_sec))
-		end
-		-- 2nd wave sound -----------------------------------------------------------------------------------------------------------------------------------------
-		if(diff_sec>=156) and (self.stages['2ndwavesnd']==nil)  then
-			--xr_sound.set_sound_play(db.actor:id(), "blowout_wave_1")
-			if rnd_sound==1 then
-				self:play_blowout_sound("wave01")
-			elseif rnd_sound==2 then
-				self:play_blowout_sound("wave02")
-			elseif rnd_sound==3 then
-				self:play_blowout_sound("wave03")
-			elseif rnd_sound==4 then
-				self:play_blowout_sound("wave04")
+			-- 1st wave -----------------------------------------------------------------------------------------------------------------------------------------
+			if(diff_sec>=120) and (self.stages['1stwave']==nil)  then
+				self:start_wave(1,diff_game_sec)
+				self.stages['1stwave']=true
+				--self.debugMessages[2]:SetText("1st wave at: "..tostring(diff_sec))
 			end
-			self.stages['2ndwavesnd']=true
-			--self.debugMessages[2]:SetText("2nd wave snd at: "..tostring(diff_sec))
-		end
-		-- 2nd wave -----------------------------------------------------------------------------------------------------------------------------------------
-		--if(diff_sec>=2) and (self.stages['2ndwave']==nil)  then
-		if(diff_sec>=168) and (self.stages['2ndwave']==nil)  then
-			self:start_wave(2,diff_game_sec)
-			self.stages['2ndwave']=true
-			if (atmosfear_options.config:r_value("atmosfear_current_parameters","opt_blowout_fate",0,"killonwave")=="killonwave") then
-			  self:get_objects_to_kill()
+			-- 2nd wave sound -----------------------------------------------------------------------------------------------------------------------------------------
+			if(diff_sec>=156) and (self.stages['2ndwavesnd']==nil)  then
+				--xr_sound.set_sound_play(db.actor:id(), "blowout_wave_1")
+				if rnd_sound==1 then
+					self:play_blowout_sound("wave01")
+				elseif rnd_sound==2 then
+					self:play_blowout_sound("wave02")
+				elseif rnd_sound==3 then
+					self:play_blowout_sound("wave03")
+				elseif rnd_sound==4 then
+					self:play_blowout_sound("wave04")
+				end
+				self.stages['2ndwavesnd']=true
+				--self.debugMessages[2]:SetText("2nd wave snd at: "..tostring(diff_sec))
 			end
-			--self.debugMessages[2]:SetText("2nd wave at: "..tostring(diff_sec))
+			-- 2nd wave -----------------------------------------------------------------------------------------------------------------------------------------
+			--if(diff_sec>=2) and (self.stages['2ndwave']==nil)  then
+			if(diff_sec>=168) and (self.stages['2ndwave']==nil)  then
+				self:start_wave(2,diff_game_sec)
+				self.stages['2ndwave']=true
+				if (atmosfear_options.config:r_value("atmosfear_current_parameters","opt_blowout_fate",0,"killonwave")=="killonwave") then
+				  self:get_objects_to_kill()
+				end
+				--self.debugMessages[2]:SetText("2nd wave at: "..tostring(diff_sec))
+			end
 		end
 		-- earthquakes fade-----------------------------------------------------------------------------------------------------------------------------------------
 		if (diff_sec>=200) and (self.stages['quake100']==true) then
@@ -776,28 +784,28 @@ function CSurgeManager:update()
 				--self.debugMessages[6]:SetText("in cover")
 			end
 			currentPPEfactor = currentPPEfactor+(PPEfactor - currentPPEfactor) * 0.1
-			if(self.effector_set) then
-				level.set_pp_effector_factor(surge_shock_pp_eff, currentPPEfactor)
-				self:displayIndicators(currentPPEfactor)
-				if (not(self.ui_disabled) and not character_community(db.actor) == "actor_monolith") then
-		            local h = hit()
-		            h.type = hit.telepatic
-		            h.power = self:hit_power(hitPower, h.type)
-		            h.impulse = 0.0
-		            h.direction = vector():set(0,0,1)
-		            h.draftsman = db.actor
-					if(xr_logic.pick_section_from_condlist(db.actor, nil, self.survive)=="true") then
-						if(db.actor.health<=h.power) then
-							if (db.actor.health-0.05 > 0.05) then
-								h.power = 0.05
-							else
-								h.power = 0
+			if (utils.load_var(db.actor,"surge_immuned",false) ~= true) then
+				if (self.effector_set) then
+					level.set_pp_effector_factor(surge_shock_pp_eff, currentPPEfactor)
+					self:displayIndicators(currentPPEfactor)
+					if (db.actor:alive() and character_community(db.actor) ~= "actor_monolith") then
+						local h = hit()
+						h.type = hit.telepatic
+						h.power = self:hit_power(hitPower, h.type)
+						h.impulse = 0.0
+						h.direction = VEC_Z
+						h.draftsman = db.actor
+						if (self.survive and xr_logic.pick_section_from_condlist(db.actor, nil, self.survive) == "true") then
+							if(db.actor.health<=h.power) then
+								if (db.actor.health-0.05 > 0.05) then
+									h.power = 0.05
+								else
+									h.power = 0
+								end
 							end
 						end
+						db.actor:hit(h)
 					end
-					if not(atmosfear_options.config:r_value("atmosfear_current_parameters","opt_god_mode",1,false) or utils.load_var(db.actor,"surge_immuned",false)) then
-	                	db.actor:hit(h)
-	                end
 				end
 			end
 			--self.debugMessages[5]:SetText("PPE: "..tostring(currentPPEfactor))
@@ -809,7 +817,7 @@ function CSurgeManager:update()
 			for k,wave in pairs(self.blowout_waves) do
 				if wave.effect:playing() then
 					local wave_pos= vector():set(actor_pos.x, actor_pos.y/2, wave.inited_pos.z-(diff_game_sec-wave.inited_time)*3)
-					wave.effect:move_to(wave_pos,vector():set(0,0,0))
+					wave.effect:move_to(wave_pos,VEC_ZERO)
 					local wavevoltemp=(250-math.abs(actor_pos.z-wave_pos.z))/250
 					if (wavevoltemp>wavevol) then
 						wavevol=wavevoltemp
@@ -840,7 +848,7 @@ function CSurgeManager:update()
 				            h.type = hit.telepatic
 				            h.power = self:hit_power(2, h.type)+0.5
 				            h.impulse = 0.0
-				            h.direction = vector():set(0,0,1)
+				            h.direction = VEC_Z
 				            h.draftsman = db.actor
 							if(xr_logic.pick_section_from_condlist(db.actor, nil, self.survive)=="true") then
 								if(db.actor.health<=h.power) then
@@ -851,7 +859,7 @@ function CSurgeManager:update()
 									end
 								end
 							end
-				            if not(atmosfear_options.config:r_value("atmosfear_current_parameters","opt_god_mode",1,false) or utils.load_var(db.actor,"surge_immuned",false)) then
+				            if (utils.load_var(db.actor,"surge_immuned",false) ~= true) then
 			                	db.actor:hit(h)
 			                end
 							self.stages['1stwavehit']=true;
@@ -861,7 +869,7 @@ function CSurgeManager:update()
 							if fate=="killatend" then
 								self:kill_all_unhided()
 							else
-								if not(atmosfear_options.config:r_value("atmosfear_current_parameters","opt_god_mode",1,false) or utils.load_var(db.actor,"surge_immuned",false)) then
+								if (utils.load_var(db.actor,"surge_immuned",false) ~= true) then
 									if not (is_actor_immune()) then 
 										self:kill_actor_at_pos(wave_pos.z)
 									end
@@ -1158,7 +1166,7 @@ function CSurgeManager:kill_crows_at_pos(pos)
 	h.type = hit.fire_wound
 	h.power = 0.9
 	h.impulse = 0.0
-	h.direction = vector():set(0,0,1)
+	h.direction = VEC_Z
 	h.draftsman = db.actor
 	for k,v in pairs(bind_crow.crow_storage) do
 		local crow = level.object_by_id(v)
@@ -1172,7 +1180,8 @@ function CSurgeManager:kill_objects_at_pos(pos)
 	if (utils.load_var(db.actor,"surge_immuned",false) == true) then 
 		return 
 	end
-	for i,id in ipairs(self.objects_to_kill) do
+	for i=1,#self.objects_to_kill do 
+		local id = self.objects_to_kill[i]
         local npc = db.storage[id] and db.storage[id].object
 		if (npc) then 
 			if (npc:position().z > pos and npc:alive()) then 
@@ -1200,7 +1209,7 @@ function CSurgeManager:kill_obj_at_pos(pos)
 					["zombied"]					= true
 	}
 	for k,v in pairs(board.squads) do
-		local squad = v
+		local squad = alife_object(k)
 		if (squad and squad:clsid() == clsid.online_offline_group_s and can_destroy_squad(squad,immuned_to_surge_squads,sim,gg)) then 
 			local squad_npcs = get_squad_members(squad.id)
 			for kk,vv in pairs(squad_npcs) do
@@ -1251,17 +1260,17 @@ function CSurgeManager:get_objects_to_kill()
 	}
 	local sim,gg = alife(),game_graph()
 	for k,v in pairs(board.squads) do
-		local squad = v
+		local squad = alife_object(k)
 		if (squad:clsid() == clsid.online_offline_group_s and can_destroy_squad(squad,immuned_to_surge_squads,sim,gg)) then 
 			local squad_npcs = get_squad_members(squad.id)
 			for kk,vv in pairs(squad_npcs) do
 				local obj = sim:object(kk)
 				if(obj and not(get_object_story_id(obj.id))) then
 					if(check_squad_smart_props(squad.id)) then
-						table.insert(self.objects_to_kill, obj.id)
+						self.objects_to_kill[#self.objects_to_kill+1] = obj.id
 					else
 						if not (self:pos_in_cover(obj.position)) then
-							table.insert(self.objects_to_kill, obj.id)
+							self.objects_to_kill[#self.objects_to_kill+1] = obj.id
 						end
 					end
 				end
@@ -1382,7 +1391,7 @@ function CSurgeManager:kill_all_unhided()
 	h.type = hit.fire_wound
 	h.power = 0.9
 	h.impulse = 0.0
-	h.direction = vector():set(0,0,1)
+	h.direction = VEC_Z
 	h.draftsman = db.actor
 	for k,id in pairs(bind_crow.crow_storage) do
 		self:delay_kill_crow(id,h)
@@ -1402,7 +1411,7 @@ function CSurgeManager:kill_all_unhided()
 	}
 	local can_skip
 	for k,v in pairs(board.squads) do
-		local squad = v
+		local squad = alife_object(k)
 		if (squad:clsid() == online_offline_group_s and  can_destroy_squad(squad,immuned_to_surge_squads,sim,gg)) then
 			local squad_npcs = get_squad_members(squad.id)
 			for kk,vv in pairs(squad_npcs) do
@@ -1446,11 +1455,13 @@ function CSurgeManager:kill_all_unhided()
 	end
 	
 	if(db.actor and db.actor:alive() and not self.actor_in_cover) then
+		--[[
 		if has_alife_info("anabiotic_in_process") then
 			local counter_name = "actor_marked_by_zone_cnt"
 			local cnt_value = utils.load_var(db.actor, counter_name, 0)
 			utils.save_var(db.actor, counter_name, cnt_value + 1)
 		end
+		]]
 		if not(atmosfear_options.config:r_value("atmosfear_current_parameters","opt_god_mode",1,false)) then
 			xr_effects.disable_ui_only(db.actor, nil)
 		end
@@ -1486,7 +1497,7 @@ function CSurgeManager:kill_all_unhided_after_actor_death()
 	}
 	local sim,gg = alife(),game_graph()
 	for k,v in pairs(board.squads) do
-		local squad = v
+		local squad = alife_object(k)
 		if (squad:clsid() == clsid.online_offline_group_s and can_destroy_squad(squad,immuned_to_surge_squads,sim,gg)) then
 			local squad_npcs = get_squad_members(squad.id)
 			for kk,vv in pairs(squad_npcs) do
@@ -1782,6 +1793,7 @@ function is_actor_immune()
 		return true
 	end
 	
+	-- Marked by the Zone.
 	if (utils.load_var(db.actor,"surge_immuned",false) == true) then 
 		return true 
 	end
@@ -1793,7 +1805,7 @@ function is_actor_immune()
 	end
 	-- 'Radiotherapy' achievement has been unlocked.
 	if (has_alife_info("achieved_radiotherapy")) then
-		if ((math.random(1,100)/100) < 0.25) then
+		if (math.random(1,100) < 25) then
 			return true
 		end
 	end

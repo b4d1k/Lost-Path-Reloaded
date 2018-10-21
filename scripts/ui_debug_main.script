@@ -1,7 +1,8 @@
 -- axr_debug_tools UI script
 -- Alundaio
-UI_ICON_EQUIPMENT_WIDTH = 1024
+UI_ICON_EQUIPMENT_WIDTH = 2048
 UI_ICON_EQUIPMENT_HEIGHT = 2048
+UI_ICON_WIDTH_SCALE = 4.4
 
 id_to_spawn_table = {
 		[1] = "Ammo",
@@ -24,58 +25,186 @@ id_to_spawn_table = {
 		[18] = "Phantom"
 }
 
+local spawn_table_list
 function get_spawn_table(name)
-	local ini = ini_file("plugins\\debug_spawner.ltx")
-	local tbl = {}
-	local sec = nil
+	if (spawn_table_list and spawn_table_list[name]) then 
+		return spawn_table_list[name]
+	end 
 	
-	-- Will tidy this later.
-	if (name == "Phantom") then
-		sec = "debug_spawner_phantom"
-	elseif (name == "Anomaly") then
-		sec = "debug_spawner_anomaly"
-	elseif (name == "Artefacts") then
-		sec = "debug_spawner_artefact"
-	elseif (name == "Outfits") then
-		sec = "debug_spawner_outfit"
-	elseif (name == "Items (Misc.)") then
-		sec = "debug_spawner_item_misc"
-	elseif (name == "Items (Consumable)") then
-		sec = "debug_spawner_item_consumable"
-	elseif (name == "Weapons (Addons)") then
-		sec = "debug_spawner_weapon_addon"
-	elseif (name == "Weapons (Pistol)") then
-		sec = "debug_spawner_weapon_pistol"
-	elseif (name == "Weapons (Rifle)") then
-		sec = "debug_spawner_weapon_rifle"
-	elseif (name == "Weapons (Misc.)") then
-		sec = "debug_spawner_weapon_misc"
-	elseif (name == "Items (Quest)") then
-		sec = "debug_spawner_item_quest"
-	elseif (name == "Ammo") then
-		sec = "debug_spawner_ammo"
-	elseif (name == "NPC (Stalker)") then
-		sec = "debug_spawner_npc_stalker"
-	elseif (name == "NPC (Mutant)") then
-		sec = "debug_spawner_npc_mutant"
-	elseif (name == "Squads (Stalker)") then
-		sec = "debug_spawner_squad_stalker"
-	elseif (name == "Squads (Mutant)") then
-		sec = "debug_spawner_squad_mutant"
-	elseif (name == "Vehicles") then
-		sec = "debug_spawner_vehicle"
-	elseif (name == "Physic (Misc.)") then
-		sec = "debug_spawner_physic_misc"
-	else return tbl end
+	spawn_table_list = {
+		["Ammo"] 				= {},
+		["Artefacts"] 			= {},
+		["Items (Consumable)"] 	= {},
+		["Items (Misc.)"] 		= {},
+		["Items (Quest)"] 		= {},
+		["NPC (Mutant)"] 		= {},				
+		["NPC (Stalker)"] 		= {},				
+		["Outfits"] 			= {},
+		["Physic (Misc.)"] 		= {},				
+		["Squads (Mutant)"] 	= {},			
+		["Squads (Stalker)"] 	= {},			
+		["Weapons (Addons)"] 	= {},
+		["Weapons (Misc.)"] 	= {},
+		["Weapons (Pistol)"] 	= {},
+		["Weapons (Rifle)"] 	= {},
+		["Vehicles"] 			= {},
+		["Anomaly"]			 	= {},
+		["Phantom"] 			= {}
+	}	
 	
-	-- Fill the table.
-	local n = ini:section_exist(sec) and ini:line_count(sec) or 0
-	for i=0, n-1 do
-		local result, id, value = ini:r_line(sec, i, "", "")
-		table.insert(tbl, id)
+	local m_classes =
+	{
+		["AI_STL_S"] = "NPC (Stalker)",
+		["AI_TRD_S"] = "NPC (Stalker)",
+
+		["SM_KAR"]	 = "NPC (Mutant)",
+		["SM_BLOOD"] = "NPC (Mutant)",
+		["SM_BOARW"] = "NPC (Mutant)",
+		["SM_BURER"] = "NPC (Mutant)",
+		["SM_CAT_S"] = "NPC (Mutant)",
+		["SM_CHIMS"] = "NPC (Mutant)",
+		["SM_CONTR"] = "NPC (Mutant)",
+		["SM_DOG_S"] = "NPC (Mutant)",
+		["SM_FLESH"] = "NPC (Mutant)",
+		["SM_IZLOM"] = "NPC (Mutant)",
+		["SM_GIANT"] = "NPC (Mutant)",
+		["AI_PHANT"] = "Phantom",
+		["SM_POLTR"] = "NPC (Mutant)",
+		["SM_P_DOG"] = "NPC (Mutant)",
+		["SM_DOG_P"] = "NPC (Mutant)",
+		["SM_DOG_F"] = "NPC (Mutant)",
+		["SM_SNORK"] = "NPC (Mutant)",
+		["SM_TUSHK"] = "NPC (Mutant)",
+		["SM_ZOMBI"] = "NPC (Mutant)",
+		["SM_RAT"]	 = "NPC (Mutant)",
+
+		["C_HLCP_S"] 	= "Vehicles",
+		["C_NIVA"] 		= "Vehicles",
+		["SCRPTCAR"] 	= "Vehicles",
+
+		["ARTEFACT"] = "Artefacts",
+		["SCRPTART"] = "Artefacts",
+
+		["ON_OFF_S"] = "Squads",
+
+		["EQ_BAKPK"] = "Outfits",
+		["II_ATTCH"] = "Items (Misc.)",
+		["II_BTTCH"] = "Items (Misc.)",
+
+		["II_DOC"]   = "Items (Misc.)",
+
+		["O_PHYSIC"] = "Physic (Misc.)",
+		["O_DSTRBL"] = "Physic (Misc.)",
+		
+		["O_PHYS_S"] = "Physic (Misc.)",
+		["O_DSTR_S"] = "Physic (Misc.)",
+
+		["S_INVBOX"] = "Physic (Misc.)",
+		["O_INVBOX"] = "Physic (Misc.)",
+
+		["DET_SIMP"] = "Items (Misc.)",
+		["DET_ADVA"] = "Items (Misc.)",
+		["DET_ELIT"] = "Items (Misc.)",
+		["DET_SCIE"] = "Items (Misc.)",
+
+		["E_STLK"]   = "Outfits",
+		["E_HLMET"]  = "Outfits",
+		["EQU_STLK"]   = "Outfits",
+		["EQU_HLMET"]  = "Outfits",
+		
+		["II_BANDG"] = "Items (Consumable)",
+		["II_MEDKI"] = "Items (Consumable)",
+		["II_ANTIR"] = "Items (Consumable)",
+		["II_BOTTL"] = "Items (Consumable)",
+		["II_FOOD"]  = "Items (Consumable)",
+		["S_FOOD"]   = "Items (Consumable)",
+
+		["S_PDA"]    = "Items (Misc.)",
+		["D_PDA"]    = "Items (Misc.)",
+
+		["WP_AK74"] = "Weapons (Rifle)",
+		["WP_ASHTG"] = "Weapons (Rifle)",
+		["WP_BINOC"] = "Weapons (Misc.)",
+		["WP_BM16"] = "Weapons (Rifle)",
+		["WP_GROZA"] = "Weapons (Rifle)",
+		["WP_HPSA"] = "Weapons (Pistol)",
+		["WP_KNIFE"] = "Weapons (Misc.)",
+		["WP_LR300"] = "Weapons (Rifle)",
+		["WP_PM"] = "Weapons (Pistol)",
+		["WP_RG6"] = "Weapons (Rifle)",
+		["WP_RPG7"] = "Weapons (Rifle)",
+		["WP_SVD"] = "Weapons (Rifle)",
+		["WP_SVU"] = "Weapons (Rifle)",
+		["WP_VAL"] = "Weapons (Rifle)",
+
+		["S_EXPLO"]  = "Physic (Misc.)",
+		["II_EXPLO"]  = "Physic (Misc.)",
+
+		["AMMO"]   = "Ammo",
+		["AMMO_S"]   = "Ammo",
+		["S_OG7B"]   = "Ammo",
+		["S_VOG25"]  = "Ammo",
+		["S_M209"]   = "Ammo",
+
+		["G_F1_S"]   = "Weapons (Misc.)",
+		["G_RGD5_S"] = "Weapons (Misc.)",
+		["G_F1"] 	 = "Weapons (Misc.)",
+		["G_RGD5"] 	 = "Weapons (Misc.)",
+
+		["WP_SCOPE"] = "Weapons (Addons)",
+		["WP_SILEN"] = "Weapons (Addons)",
+		["WP_GLAUN"] = "Weapons (Addons)",
+
+		["ZS_MBALD"] = "Anomaly",
+		["ZS_GALAN"] = "Anomaly",
+		["ZS_MINCE"] = "Anomaly",
+		["ZS_RADIO"] = "Anomaly",
+		["ZS_TORRD"] = "Anomaly",
+		["ZS_NGRAV"] = "Anomaly",
+		["Z_MBALD"]  = "Anomaly",
+		["Z_RADIO"]  = "Anomaly",
+		["Z_CFIRE"]  = "Anomaly",
+		["Z_NOGRAV"] = "Anomaly",
+		["Z_TORRID"] = "Anomaly",
+		["Z_RUSTYH"] = "Anomaly",
+		["ZS_BFUZZ"] = "Anomaly",
+		["ZS_AMEBA"] = "Anomaly"
+	}
+	
+	local ltx = ini_file("plugins\\spawner_blacklist.ltx")
+	local ini = system_ini()
+	ini:section_for_each(function(section)
+		if not (ltx:line_exist("ignore_sections",section)) then
+			local class = ini:r_string_ex(section,"class")
+			if (class) then 
+				local typ = m_classes[class]
+				if (typ) then
+					if (typ == "Squads") then 
+						local is_monster = ini:r_string_ex(section,"faction") or ""
+						if (string.find(is_monster,"monster")) then 
+							typ = typ .. " (Mutant)"
+						else 
+							typ = typ .. " (Stalker)"
+						end
+					elseif (string.find(typ,"Items")) then 
+						if (ini:r_bool_ex(section,"quest_item",false) == true) then 
+							typ = "Items (Quest)"
+						end
+					end
+					local scope = ini:r_string_ex(section,"description")
+					if (scope and scope:find("st_dxr_addon_scope_")) then
+						typ = "Weapons (Addons)"
+					end
+					if (spawn_table_list[typ]) then
+						spawn_table_list[typ][#spawn_table_list[typ]+1] = section
+					end
+				end
+			end
+		end
 	end
+	)	
 	
-	return tbl
+	return spawn_table_list[name]
 end
 
 ------------------------------------------------------------
@@ -490,7 +619,7 @@ function debug_ui:OnBtnSetLogic()
 	if (id and scheme and section and ini_filename) then
 		local obj = db.storage[id] and db.storage[id].object or level.object_by_id(id)
 		if (obj) then
-			axr_logic.set_new_scheme_and_logic(obj,scheme,section,logic,nil,ini_filename)
+			xr_logic.set_new_scheme_and_logic(obj,scheme,section,logic,nil,ini_filename)
 			self:SendOutput("New scheme and logic set for %s.",obj:name())
 		end
 	end
@@ -502,7 +631,7 @@ function debug_ui:OnBtnRevertLogic()
 	if (id) then
 		local obj = db.storage[id] and db.storage[id].object or level.object_by_id(id)
 		if (obj) then
-			axr_logic.restore_scheme_and_logic(obj)
+			xr_logic.restore_scheme_and_logic(obj)
 			self:SendOutput("Reverted scheme and logic for %s.",obj:name())
 		end
 	end
@@ -744,8 +873,10 @@ function debug_ui:FillList(name)
 			if (is_squad) then
 				_itm.no_id = true
 				_itm.squad = true
+				_itm.spawn_at_look = true
 			elseif (cant_spawn_actor) then
 				_itm.no_id = true
+				_itm.spawn_at_look = true
 			elseif (is_veh) then 
 				_itm.no_id = true
 				_itm.spawn_at_look = true
@@ -855,18 +986,17 @@ function debug_ui:OnButton_create_clicked()
 	end
 
 	local pos, lvid, gvid
-	
-	if (item.spawn_at_look) then 
-		gvid = db.actor:game_vertex_id()
-		local r = level.get_target_dist and level.get_target_dist() or 3
-		pos = vector():set(db.actor:position())
-		pos:add(device().cam_dir:mul(r))
-		pos = vector():set(pos.x,db.actor:position().y,pos.z)
-		lvid = level.vertex_id(pos)
-	elseif (self.spawn_pos) then
+	if (self.spawn_pos) then
 		pos = self.spawn_pos
 		lvid = self.spawn_lvid
 		gvid = self.spawn_gvid
+	elseif (item.spawn_at_look) then 
+		gvid = db.actor:game_vertex_id()
+		local r = level.get_target_dist and level.get_target_dist() or 3
+		pos = vector():set(db.actor:position())
+		pos:add(vector():set(device().cam_dir):mul(r))
+		pos = vector():set(pos.x,db.actor:position().y,pos.z)
+		lvid = level.vertex_id(pos)
 	else
 		pos = db.actor:position()
 		lvid = db.actor:level_vertex_id()
@@ -884,7 +1014,7 @@ function debug_ui:OnButton_create_clicked()
 	local id = not item.no_id and self.check_to_actor:GetCheck() and 0
 	local se_obj
 	if (id) then
-		se_obj = alife():create(section, vector(), 0, 0, id)
+		se_obj = alife():create(section, vector():set(0,0,0), 0, 0, id)
 	else
 		se_obj = alife():create(section, pos, lvid, gvid)
 	end
@@ -903,7 +1033,7 @@ function debug_ui:OnButton_create_clicked()
 			data.shapes = {}
 			data.shapes[1] = {}
 			data.shapes[1].shtype = 0
-			data.shapes[1].offset = vector():set(0,0,0)
+			data.shapes[1].offset = VEC_ZERO
 			data.shapes[1].radius = 10
 			stpk_utils.set_object_data(data,se_obj)
 		end
@@ -1043,8 +1173,8 @@ function debug_ui:OnEditorTriggerSectionSelection()
 	self.fld_icon_height:SetText(tostring(inv_grid_height))
 	
 	pos = self.ui_icon_equipment:GetWndPos()
-	self.icon_square:SetWndPos(vector2():set( pos.x+x1/2.2 , pos.y+y1/3 ))
-	self.icon_square:SetWndSize(vector2():set(w/2.2,h/3))
+	self.icon_square:SetWndPos(vector2():set( pos.x+x1/UI_ICON_WIDTH_SCALE , pos.y+y1/3 ))
+	self.icon_square:SetWndSize(vector2():set(w/UI_ICON_WIDTH_SCALE,h/3))
 	
 	self.editor_icon_addon:SetTextureRect(Frect():set(0,0,0,0))
 	self.fld_addon_offset_x:SetText("")
@@ -1171,8 +1301,8 @@ function debug_ui:OnEditIcon()
 	self.editor_icon:SetWndSize(vector2():set(w*scale,h*scale))
 	
 	local pos = self.ui_icon_equipment:GetWndPos()
-	self.icon_square:SetWndPos(vector2():set( pos.x+x1/2.2 , pos.y+y1/3 ))
-	self.icon_square:SetWndSize(vector2():set(w/2.2,h/3))
+	self.icon_square:SetWndPos(vector2():set( pos.x+x1/UI_ICON_WIDTH_SCALE , pos.y+y1/3 ))
+	self.icon_square:SetWndSize(vector2():set(w/UI_ICON_WIDTH_SCALE,h/3))
 	
 	local name = self.addon_list:GetText()
 	if not (name and name ~= "" and name ~= "Select Attachment") then
@@ -1287,7 +1417,7 @@ function debug_ui:OnEditorSave()
 
 	local sp = getFS():update_path('$game_config$', '')
 	sp = string.sub(sp,0,string.len(sp)-1)
-	lua_extensions.recurse_subdirectories_and_execute(sp,{"ltx"},on_execute)
+	utils.file_for_each(sp,{"ltx"},on_execute)
 	
 	if (reload_system_ini) then 
 		reload_system_ini()
@@ -1312,7 +1442,7 @@ function debug_ui:FillAnim()
 	end	
 	local sp = getFS():update_path('$game_anims$', '')
 	sp = string.sub(sp,0,string.len(sp)-1)
-	lua_extensions.recurse_subdirectories_and_execute(sp,{"ppe","anm"},fill_tbl)
+	utils.file_for_each(sp,{"ppe","anm"},fill_tbl)
 	-------
 	self.anims_list:RemoveAll()
 	for i=1, #anim_tbl do
@@ -1600,8 +1730,8 @@ function debug_ui_editor:InitControls(x, y, xml, owner)
 	owner.ui_icon_equipment = xml:InitStatic("ui_icon_equipment",owner)
 	
 	owner.ui_icon_equipment:InitTexture("ui\\ui_icon_equipment")
-	owner.ui_icon_equipment:SetWndSize(vector2():set(UI_ICON_EQUIPMENT_WIDTH/2.2,UI_ICON_EQUIPMENT_HEIGHT/3))
-	owner.ui_icon_equipment_back:SetWndSize(vector2():set(UI_ICON_EQUIPMENT_WIDTH/2.2+25,UI_ICON_EQUIPMENT_HEIGHT/3+20))
+	owner.ui_icon_equipment:SetWndSize(vector2():set(UI_ICON_EQUIPMENT_WIDTH/UI_ICON_WIDTH_SCALE,UI_ICON_EQUIPMENT_HEIGHT/3))
+	owner.ui_icon_equipment_back:SetWndSize(vector2():set(UI_ICON_EQUIPMENT_WIDTH/UI_ICON_WIDTH_SCALE+25,UI_ICON_EQUIPMENT_HEIGHT/3+20))
 	
 	
 	owner.icon_square = xml:InitFrame("square",owner)
@@ -1642,6 +1772,7 @@ function debug_ui_attach:__init(owner, binds) super()
 	self.need_save = {}
 
 	local ctrl = CUIWindow()
+	ctrl:SetAutoDelete(true)
 	self.xml:InitWindow("wnd_attach_editor:file_item:main",0,ctrl)
 	self.form = self.xml:InitStatic("wnd_attach_editor:form",self)
 	self.xml:InitFrame("wnd_attach_editor:form:list_frame",self.form)
@@ -1672,6 +1803,7 @@ function debug_ui_attach:__init(owner, binds) super()
 	self:Register(self.attachable, "attach_list")
 	self:AddCallback("attach_list", ui_events.LIST_ITEM_SELECT,	self.OnAttachListSelect,self)
 	
+	self.attachable:ClearList()
 	local sys_ini = system_ini()
 	local t = alun_utils.parse_list(sys_ini,"stalker","attachable_items")
 	if (#t > 0) then
@@ -1708,8 +1840,9 @@ function debug_ui_attach:__init(owner, binds) super()
 	self.anim_states = xml:InitComboBox("wnd_attach_editor:form:list_states", self.form)
 	self:Register(self.anim_states, "state_list")
 	self:AddCallback("state_list", ui_events.LIST_ITEM_SELECT,	self.OnStateListSelect,self)
+	self.anim_states:SetAutoDelete(true)
 	
-	t = empty_table(t) or {}
+	t = iempty_table(t)
 	
 	for state,_ in pairs(state_lib.states) do 
 		table.insert(t,state)
@@ -1717,8 +1850,9 @@ function debug_ui_attach:__init(owner, binds) super()
 	
 	table.sort(t)
 	
+	self.anim_states:ClearList()
 	for i=1,#t do 
-		self.anim_states:AddItem(t[i],#t-1)
+		self.anim_states:AddItem(t[i],i-1)
 	end
 end
 function debug_ui_attach:__finalize()
@@ -1765,12 +1899,19 @@ function debug_ui_attach:OnStateListSelect()
 		return 
 	end
 	
+	if not (state_lib.states[state]) then 
+		printf("debug_ui_attach state %s doesn't exist",state)
+		return 
+	end 
+	
 	local npc = xrs_debug_tools.get_debug_npc()
 	if not (npc and npc:id() ~= 0) then
-		return 
+		 printf("debug_ui_attach:OnStateListSelect: debug npc not found")
+		return
 	end
 	
 	db.storage[npc:id()].debug_state = state
+	
 	state_mgr.set_state(npc, state,nil, nil, nil, { fast_set = true })
 end 
 
@@ -1875,13 +2016,11 @@ function debug_ui_attach:OnAttachSave(section)
 
 	local sp = getFS():update_path('$game_config$', '')
 	sp = string.sub(sp,0,string.len(sp)-1)
-	lua_extensions.recurse_subdirectories_and_execute(sp,{"ltx"},on_execute)
+	utils.file_for_each(sp,{"ltx"},on_execute)
 	
 	if (reload_system_ini) then 
 		reload_system_ini()
 	end
-	
-	self:SetMsg(strformat("Successfully saved changes to %s",section),5)
 end
 function debug_ui_attach:On_fld_attach_x()
 	self:OnEditAttach("x")
@@ -1948,7 +2087,7 @@ end
 function debug_ui_attach:OnAttach()
 	local npc = xrs_debug_tools.get_debug_npc()
 	if not (npc and npc:id() ~= 0) then
-		return 
+		return printf("debug_ui_attach: no npc found")
 	end
 	
 	local section = self._last == "attach" and self.attachable:GetText() or self._last == "weapon" and self.weapons:GetText() or nil
@@ -2026,7 +2165,7 @@ function anim_ui:FillAnim()
 	end	
 	local sp = getFS():update_path('$game_anims$', '')
 	sp = string.sub(sp,0,string.len(sp)-1)
-	lua_extensions.recurse_subdirectories_and_execute(sp,{"ppe","anm"},fill_tbl)
+	utils.file_for_each(sp,{"ppe","anm"},fill_tbl)
 	-------
 	self.anims_list:RemoveAll()
 	for i=1, #anim_tbl do
@@ -2060,5 +2199,188 @@ function anim_ui:OnKeyboard(dik, keyboard_action)
 end
 
 function anim_ui:OnQuit()
+	self:HideDialog()
+end
+----------------------------------------------------------------------------
+-- 3D UI offset Editor 
+----------------------------------------------------------------------------
+class "debug_ui_3d" (CUIScriptWnd)
+function debug_ui_3d:__init(owner, binds) super()
+	self:SetWndRect				(Frect():set(0,0,1024,768))
+	self:Enable					(true)
+
+	local xml					= CScriptXmlInit()
+	self.xml = xml
+	xml:ParseFile				("ui_debug_main.xml")
+	
+	self:SetAutoDelete(true)
+	self.owner = owner
+	self.need_save = {}
+
+	local ctrl = CUIWindow()
+	ctrl:SetAutoDelete(true)
+	self.xml:InitWindow("wnd_attach_editor:file_item:main",0,ctrl)
+	self.form = self.xml:InitStatic("wnd_attach_editor:form",self)
+	self.xml:InitFrame("wnd_attach_editor:form:list_frame",self.form)
+	
+	ctrl = self.xml:Init3tButton("wnd_attach_editor:form:btn_save",self.form)
+	self:Register(ctrl, "btn_ui_3d")
+	self:AddCallback("btn_ui_3d", ui_events.BUTTON_CLICKED, self.OnAttach, self)
+	
+	xml:InitStatic("wnd_attach_editor:form:cap_pos", self.form)
+	xml:InitStatic("wnd_attach_editor:form:cap_angle", self.form)
+	
+	self.flds = {"x","y","z","rot_x","rot_y","rot_z"}
+	for i=1,#self.flds do
+		xml:InitStatic("wnd_attach_editor:form:cap_"..self.flds[i], self.form)
+		self["fld_attach_"..self.flds[i]] = xml:InitEditBox("wnd_attach_editor:form:fld_"..self.flds[i], self.form)
+		self:Register(self["fld_attach_"..self.flds[i]],"fld_attach_"..self.flds[i])
+		
+		self:AddCallback("fld_attach_"..self.flds[i],	  ui_events.EDIT_TEXT_COMMIT, self["On_fld_attach_"..self.flds[i]],	self)
+	end 
+	
+	self:Reset()
+end
+function debug_ui_3d:__finalize()
+
+end
+function debug_ui_3d:Reset()
+	local itm = db.actor:active_item()
+	if not (itm) then 
+		return 
+	end
+	
+	local section = itm:section()
+	local hud_section = system_ini():r_string_ex(section,"hud")
+	if not (hud_section) then 
+		return 
+	end 
+	
+	local pos = alun_utils.parse_list(system_ini(),hud_section,"hud_ui_pos")
+	local angle = alun_utils.parse_list(system_ini(),hud_section,"hud_ui_rot")
+	
+	if not (#pos > 0) then
+		return 
+	end
+	
+	for i=1,#pos do 
+		if (self["fld_attach_"..self.flds[i]]) then 
+			self["fld_attach_"..self.flds[i]]:SetText(pos[i])
+		end
+	end
+	
+	if not (#angle > 0) then
+		return
+	end
+	
+	for i=1,#angle do 
+		if (self["fld_attach_"..self.flds[i+3]]) then 
+			self["fld_attach_"..self.flds[i+3]]:SetText(angle[i])
+		end
+	end
+end 
+function debug_ui_3d:OnAttachSave(section)
+	local fld
+	local vals = {}
+	for i=1,#self.flds do
+		fld = self["fld_attach_"..self.flds[i]]
+		if not (fld) then 
+			return 
+		end
+		
+		if not (tonumber(fld:GetText())) then 
+			return 
+		end
+		
+		vals[self.flds[i]] = tonumber(fld:GetText())
+	end 
+
+	local function file_exists(path)
+		return io.open(path) ~= nil
+	end
+
+	local function on_execute(path,filename,quit)
+		local fullpath = path.."\\"..filename
+		local ltx = io.open(fullpath,"rb")
+		if (ltx) then
+			local data = ltx:read("*all")
+			ltx:close()
+			if (data) then
+				if (string.find(data,"["..section.."]",nil,true)) then
+					ltx = alun_utils.cfg_file(fullpath)
+					if (ltx) then
+						ltx:SetValue(section,"hud_ui_pos",vals.x .. ", " .. vals.y .. ", " .. vals.z)
+						ltx:SetValue(section,"hud_ui_rot",vals.rot_x .. ", " .. vals.rot_y .. ", " .. vals.rot_z)
+						ltx:SaveExt()
+						return
+					end
+				end
+			end
+		end
+	end
+
+	local sp = getFS():update_path('$game_config$', '')
+	sp = string.sub(sp,0,string.len(sp)-1)
+	utils.file_for_each(sp,{"ltx"},on_execute)
+
+	if (reload_system_ini) then 
+		reload_system_ini()
+	end
+	
+	local itm = db.actor:active_item()
+	if (itm) then
+		itm:reset_3d_ui()
+	end
+end
+function debug_ui_3d:On_fld_attach_x()
+	self:OnEditAttach("x")
+end 
+function debug_ui_3d:On_fld_attach_y()
+	self:OnEditAttach("y")
+end 
+function debug_ui_3d:On_fld_attach_z()
+	self:OnEditAttach("z")
+end 
+function debug_ui_3d:On_fld_attach_rot_x()
+	self:OnEditAttach("rot_x")
+end 
+function debug_ui_3d:On_fld_attach_rot_y()
+	self:OnEditAttach("rot_y")
+end 
+function debug_ui_3d:On_fld_attach_rot_z()
+	self:OnEditAttach("rot_z")
+end 
+function debug_ui_3d:OnEditAttach(fld)
+	local itm = db.actor:active_item()
+	if not (itm and IsWeapon(itm)) then
+		return 
+	end 
+	
+	self.need_save[fld] = true
+
+	--self:OnAttachSave(itm:section())
+end 
+function debug_ui_3d:OnAttach()
+	local itm = db.actor:active_item()
+	if not (itm) then
+		return 
+	end 
+
+	local hud_section = system_ini():r_string_ex(itm:section(),"hud")
+	if (hud_section) then
+		self:OnAttachSave(hud_section)
+	end
+end
+function debug_ui_3d:OnKeyboard(dik, keyboard_action)
+	CUIScriptWnd.OnKeyboard(self,dik,keyboard_action)
+	if keyboard_action == ui_events.WINDOW_KEY_RELEASED then
+		local keybinds = self.binds or {}
+		if (dik == DIK_keys.DIK_ESCAPE) then
+			self:OnQuit()
+		end
+	end
+	return true
+end
+function debug_ui_3d:OnQuit()
 	self:HideDialog()
 end

@@ -2,21 +2,23 @@
 ----- Written by Darryl123 ------
 ---------------------------------
 
--- Column and row limits.
-local column_limit = 5
-local row_limit = 10
-
 local SINGLETON = nil
 function get_ui()
 	SINGLETON = SINGLETON or pda_contacts_tab()
 	SINGLETON:Reset()
 	return SINGLETON
 end
+
 -- Constructor.
 class "pda_contacts_tab" (CUIScriptWnd)
 function pda_contacts_tab:__init() super()
 	self.contact_info = {}
 	self:InitControls()
+end
+
+-- Finalize.
+function pda_contacts_tab:__finalize()
+	SINGLETON = nil 
 end
 
 -- Initialise the interface.
@@ -29,25 +31,22 @@ function pda_contacts_tab:InitControls()
 	xml:InitFrame("frame1", self)
 	xml:InitFrame("frame2", self)
 	
-	-- Refresh checkbox.
+	-- 'Refresh' checkbox.
 	self.auto_chk = xml:InitCheck("auto_check", self)
-	self.auto_chk:SetCheck(axr_main.config:r_value("pda_contacts", "check_refresh", 1, false))
+	self.auto_chk:SetCheck(axr_main.config:r_value("pda_contacts", "check_refresh", 1, true))
 	self:Register(self.auto_chk, "check_refresh")
 	self:AddCallback("check_refresh", ui_events.BUTTON_CLICKED, self.SaveCheckBoxSettings, self)
 	
 	-- 'Known contacts' checkbox.
-	self.show_all = xml:InitCheck("show_all", self)
-	self.show_all:SetCheck(axr_main.config:r_value("pda_contacts", "check_show_known", 1, true))
-	self:Register(self.show_all, "check_show_known")
-	self:AddCallback("check_show_known", ui_events.BUTTON_CLICKED, self.SaveCheckBoxSettings, self)
+	self.filter = xml:InitCheck("filter", self)
+	self.filter:SetCheck(axr_main.config:r_value("pda_contacts", "check_filter", 1, false))
+	self:Register(self.filter, "check_filter")
+	self:AddCallback("check_filter", ui_events.BUTTON_CLICKED, self.SaveCheckBoxSettings, self)
 	
 	-- List of contact rows.
 	self.listbox = xml:InitListBox("listbox", self)
 	self.listbox:SetItemHeight(140)
 	self:Register(self.listbox, "listbox")
-	for i = 1, row_limit do
-		self.listbox:AddExistingItem(ui_contact_row(self, i, xml))
-	end
 	
 	-- Hint Window
 	self.hint_wnd = xml:InitFrame("hint_wnd:background", self)
@@ -59,7 +58,7 @@ end
 -- Save checkboxes.
 function pda_contacts_tab:SaveCheckBoxSettings()
 	axr_main.config:w_value("pda_contacts", "check_refresh",  self.auto_chk:GetCheck())
-	axr_main.config:w_value("pda_contacts", "check_show_known",  self.show_all:GetCheck())
+	axr_main.config:w_value("pda_contacts", "check_filter",  self.filter:GetCheck())
 	axr_main.config:save()
 end
 
@@ -88,13 +87,13 @@ function pda_contacts_tab:Update()
 	if self.auto_chk:GetCheck() then
 		local tg = time_global()
 		if not self._tmr or self._tmr < tg then
-			self._tmr = tg + 5000
+			self._tmr = tg + 2500
 			self:Reset()
 		end
 	end
 	
 	-- Create the hint window.
-	for i=1, (column_limit * row_limit) do
+	for i=1, #self.contact_info do
 		if (self.contact_info[i].icon_field:IsShown()) then 
 			local pos = GetCursorPosition()
 			local rect = Frect():set(0, 0, 0, 0)
@@ -115,19 +114,8 @@ function pda_contacts_tab:Reset()
 	local radius = (system_ini():r_float_ex("device_pda", "radius") or 68) ^ 2
 
 	-- Erase all pre-existing information.
-	for i = 1, (column_limit * row_limit) do
-		if (self.contact_info[i]) then
-			self.contact_info[i].comm_field:SetText("")
-			self.contact_info[i].comm_label:SetText("")
-			self.contact_info[i].icon_field:Show(false)
-			self.contact_info[i].name_field:SetText("")
-			self.contact_info[i].rank_field:SetText("")
-			self.contact_info[i].rank_label:SetText("")
-			self.contact_info[i].rept_field:SetText("")
-			self.contact_info[i].rept_label:SetText("")
-			self.contact_info[i].hint = ""
-		end
-	end
+	self.contact_info = {}
+	self.listbox:RemoveAll()
 	
 	-- Loop through all currently online stalkers.
 	local display_list = {}
@@ -140,7 +128,7 @@ function pda_contacts_tab:Reset()
 			local distance = db.actor:position():distance_to_sqr(npc:position()) or 0
 			if (distance <= radius) then
 				if npc:relation(db.actor) ~= game_object.enemy then
-					if self.show_all:GetCheck() then
+					if self.filter:GetCheck() then
 						if (m_data.actor_contacts and m_data.actor_contacts[db.OnlineStalkers[i]]) then
 							table.insert(display_list, npc)
 						end
@@ -153,13 +141,18 @@ function pda_contacts_tab:Reset()
 	end
 	
 	-- Special case for Sidorovich and Forester.
-	local sor = story_objects.get_story_objects_registry()
 	local function add_by_sid(sid)
-		local id = sor:get(sid)
+		local id = story_objects.object_id_by_story_id[sid]
 		if (id) then 
 			local npc = db.storage[id] and db.storage[id].object 
 			if (npc and db.actor:position():distance_to_sqr(npc:position()) <= radius) then 
-				table.insert(display_list, npc)
+				if self.filter:GetCheck() then
+					if (m_data.actor_contacts and m_data.actor_contacts[id]) then
+						table.insert(display_list, npc)
+					end
+				else
+					table.insert(display_list, npc)
+				end
 			end
 		end
 	end
@@ -167,7 +160,17 @@ function pda_contacts_tab:Reset()
 	add_by_sid("red_tech_forester")
 	
 	-- Loop through all stalkers to display.
-	for index,stalker in ipairs(display_list) do
+	local row = 1
+	self.listbox:AddExistingItem(ui_contact_row(self, row, nil))
+	for index=1,#display_list do 
+		local stalker = display_list[index]
+		
+		-- Add an extra row if the previous one is full.
+		if index > 5 and math.mod(index - 1, 5) == 0 then
+			row = row + 1
+			self.listbox:AddExistingItem(ui_contact_row(self, row, nil))
+		end
+		
 		-- Retrieve required information.
 		local stalker_comm = stalker:character_community()
 		local stalker_icon = stalker:character_icon()
@@ -180,8 +183,8 @@ function pda_contacts_tab:Reset()
 		self.contact_info[index].icon_field:Show(true)
 		
 		local name = string.gsub(stalker_name, "Junior", "Jr.")
-		name = string.gsub(name, "Senior", "Sr.")
-		name = string.gsub(name, "Master ", "M.")
+		name = string.gsub(name, "Senior", "Snr.")
+		name = string.gsub(name, "Master ", "M. ")
 		name = string.gsub(name, "Private", "Pvt.")
 		name = string.gsub(name, "Sergeant", "Sgt.")
 		name = string.gsub(name, "Lieutenant", "Lt.")
@@ -260,9 +263,9 @@ function ui_contact_row:__init(parent, row, xml) super(parent, row, xml)
 	
 	-- Five stalkers are listed on each row.
 	-- Create the components for each info slot.
-	for i = 1, column_limit do
+	for i = 1, 5 do
 		-- Calculate the index for each entry.
-		index = i + (column_limit * (row - 1))
+		index = i + (5 * (row - 1))
 		
 		-- Create the components for each entry.
 		parent.contact_info[index] = {
@@ -281,6 +284,7 @@ function ui_contact_row:__init(parent, row, xml) super(parent, row, xml)
 		parent.contact_info[index].icon_field:SetStretchTexture(true)
 		parent.contact_info[index].icon_field:SetWndSize(vector2():set(64, 64))
 		parent.contact_info[index].icon_field:SetWndPos(vector2():set(x, 0))
+		parent.contact_info[index].icon_field:Show(false)
 		
 		parent.contact_info[index].name_field:SetFont(GetFontLetterica16Russian())
 		parent.contact_info[index].name_field:SetWndSize(vector2():set(120, 20))

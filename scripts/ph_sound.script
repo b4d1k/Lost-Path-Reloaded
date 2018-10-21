@@ -109,9 +109,11 @@ function snd_source:update(delta)
 		else
 			self.played_sound:set_position (self.object:position ())
 		end
-		local volume = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.volume)
-		if (volume and volume ~= "") then 
-			self.played_sound.volume = tonumber(volume)
+		if (self.st.volume) then
+			local volume = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.volume)
+			self.played_sound.volume = volume and tonumber(volume) or 1
+		else
+			self.played_sound.volume = 1
 		end
 	end
 end
@@ -141,7 +143,7 @@ function set_scheme(npc, ini, scheme, section, gulag_name)
 	st.pause_min = ini:r_float_ex(section,"min_idle") or 0
 	st.pause_max = ini:r_float_ex(section,"max_idle") or 0
 	st.no_hit   = ini:r_bool_ex(section,"no_hit",true)
-	st.volume = xr_logic.parse_condlist(npc, section, "volume",ini:r_string_ex(section,"volume") or "1")
+	st.volume = ini:r_string_to_condlist(section,"volume")
 	if st.pause_max < st.pause_min then
 	   abort ("PH_SOUND - invalid time range !!!")
     end

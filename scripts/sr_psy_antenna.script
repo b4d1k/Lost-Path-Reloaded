@@ -51,7 +51,7 @@ function PsyAntenna:__init				()
 	self.no_mumble 						= false
 	self.hit_type	 					= "wound"
 	self.hit_freq 						= 5000
-
+	self.global_state 					= state_void
 end
 function PsyAntenna:destroy				()
 	self.sound_obj_right:stop()
@@ -61,8 +61,6 @@ function PsyAntenna:destroy				()
 	if (hud) then
 		hud:enable_fake_indicators(false)
 	end
-end
-function PsyAntenna:construct			()
 end
 function PsyAntenna:update_psy_hit(dt)
 	local hud = get_hud()
@@ -123,9 +121,6 @@ function PsyAntenna:update_psy_hit(dt)
 	end
 end
 function PsyAntenna:generate_phantoms()
-	if (sr_psy_antenna.psy_antenna.global_state ~= 1) then 
-		return 
-	end
 	if (db.actor:is_talking()) then 
 		return 
 	end
@@ -181,7 +176,7 @@ function PsyAntenna:update(dt)
 		return 
 	end 
 	
-	self.eff_time					= self.eff_time + dt
+	self.eff_time = self.eff_time + dt
 
 	local function update_intensity(intensity_base, intensity)
 		local di = self.intensity_inertion * dt * 0.01
@@ -198,8 +193,10 @@ function PsyAntenna:update(dt)
 		elseif	ii > 1.0 then ii = 1.0 end
 		return ii
 	end
-
-	self:generate_phantoms()
+	
+	if (self.global_state == 1) then 
+		self:generate_phantoms()
+	end
 
 	if not self.no_mumble then
 		self.sound_intensity = update_intensity(self.sound_intensity_base, self.sound_intensity)
@@ -341,19 +338,20 @@ function action_psy_antenna:update( delta )
 end
 function action_psy_antenna:switch_state( actor )
 	if self.state ~= state_inside then
-		if self.object:inside( actor:position() ) then
+		if (db.actor_inside_zones[self.object:name()]) then
+		--if self.object:inside( actor:position() ) then
 			self:zone_enter()
-			return
 		end
-	else
-		if not self.object:inside( actor:position() ) then
+	elseif (self.state == state_inside) then
+		if not (db.actor_inside_zones[self.object:name()]) then
+		--if not self.object:inside( actor:position() ) then
 			self:zone_leave()
-			return
 		end
 	end
 end
+
 function action_psy_antenna:zone_enter()
---'	printf("[psy_antenna] zone_enter")
+	--printf("[psy_antenna] zone_enter")
 	self.state = state_inside
 	psy_antenna.global_state = state_inside
 
@@ -387,8 +385,9 @@ function action_psy_antenna:zone_enter()
 	end
 	psy_antenna.postprocess[self.st.postprocess].intensity_base = psy_antenna.postprocess[self.st.postprocess].intensity_base + self.st.intensity
 end
+
 function action_psy_antenna:zone_leave()
---'		printf("[psy_antenna] zone_leave. hit_intensity=%s", tostring(psy_antenna.hit_intensity))
+	--printf("[psy_antenna] zone_leave. hit_intensity=%s", tostring(psy_antenna.hit_intensity))
 	self.state = state_outside
 	psy_antenna.global_state = state_outside
 	
@@ -447,8 +446,6 @@ function load(p)
 		end
 
 		psy_antenna = PsyAntenna()
-		psy_antenna:construct()
-
 		psy_antenna:load(p)
 	end
 	set_save_marker(p, "load", true, "sr_psy_antenna")
@@ -459,7 +456,6 @@ function add_to_binder(npc, ini, scheme, section, storage)
 
 	if not psy_antenna then
 		psy_antenna = PsyAntenna()
-		psy_antenna:construct()
 		psy_antenna.global_state = state_void
 	end
 

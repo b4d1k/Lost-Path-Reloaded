@@ -1,17 +1,51 @@
 -- called from engine!
+local flags = {}
 function on_key_press(dik,bind)
 
 	if (level.present() and db.actor) then
+		--	You must check in your callback, and set flags.ret = true if an action took place
+		flags.ret = false
+		SendScriptCallback("level_input_on_key_press",dik,bind,flags)
+		if (flags.ret == true) then 
+			return true
+		end
+	
 		if (bind == key_bindings.kQUICK_SAVE) then
 			return action_quick_save()
 		elseif (bind == key_bindings.kQUICK_LOAD) then 
 			return action_quick_load()
+		elseif (bind == key_bindings.kPDA_TAB1) then
+			return action_toggle_pda_tab("eptTasks")
+		elseif (bind == key_bindings.kPDA_TAB2) then
+			return action_toggle_pda_tab("eptRelations")
+		elseif (bind == key_bindings.kPDA_TAB3) then
+			return action_toggle_pda_tab("eptContacts")
+		elseif (bind == key_bindings.kPDA_TAB4) then
+			return action_toggle_pda_tab("eptRanking")
+		elseif (bind == key_bindings.kPDA_TAB5) then
+			return action_toggle_pda_tab("eptLogs")
+		elseif (bind == key_bindings.kPDA_TAB6) then
+			return action_toggle_pda_tab("eptEncyclopedia")
 		end
-		
-		SendScriptCallback("level_input_on_key_press",dik,bind)
 	end
 	
 	return false
+end
+
+function action_toggle_pda_tab(str)
+	local pda_menu = ActorMenu.get_pda_menu()
+	if not (pda_menu:IsShown()) then
+		pda_menu:ShowDialog(true)
+		pda_menu:GetTabControl():SetActiveTab(str)
+		pda_menu:SetActiveSubdialog(str)
+	else 
+		if (pda_menu:GetActiveSection() == str) then
+			pda_menu:HideDialog()
+		else
+			pda_menu:GetTabControl():SetActiveTab(str)
+			pda_menu:SetActiveSubdialog(str)
+		end
+	end
 end
 
 function action_quick_save()

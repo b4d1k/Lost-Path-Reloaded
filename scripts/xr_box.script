@@ -74,7 +74,7 @@ function ph_item_box:spawn_items(obj,who,spawn_ini)
 	
 	for k,v in pairs(spawn_list) do
 		if (v > 0) then
-			local number = math.random(count_by_level[k][1], count_by_level[k][2])
+			local number = count_by_level[k] and math.random(count_by_level[k][1], count_by_level[k][2]) or math.random(0,1)
 			if (number > 0) then
 				create_items(obj, k, number, v)
 			end
@@ -112,8 +112,8 @@ function create_obligatory_items(obj, spawn_ini)
 	end
 	
 	local items = parse_names(spawn_ini:r_string_ex("drop_box", "items"))
-	
-	if (#items > 0) then
+	local size_t = #items
+	if (size_t > 0) then
 		local position = vector():set(0,0,0)
 		position.x = obj:position().x
 		position.z = obj:position().z
@@ -121,7 +121,8 @@ function create_obligatory_items(obj, spawn_ini)
 			
 		local sim = alife()
 		local sys_ini = system_ini()
-		for i,section in ipairs(items) do
+		for i=1,size_t do
+			local section = items[i]
 			if not (sys_ini:section_exist(section) and sys_ini:line_exist(section,"cform")) then 
 				return 
 			end

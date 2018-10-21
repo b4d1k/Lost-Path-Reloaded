@@ -87,7 +87,7 @@ function action_smartcover_activity:activate_scheme()
 
 		--' Вычитываем кондлист который вернет поведение чувака в смарткавере.
 		self.cover_condlist = xr_logic.parse_condlist(object, self.st.active_section, "cover_state", self.st.cover_state)
-		self.cover_state = xr_logic.pick_section_from_condlist(db.actor, object ,self.cover_condlist)
+		self.cover_state = self.cover_condlist and xr_logic.pick_section_from_condlist(db.actor, object ,self.cover_condlist)
 		self:target_selector(self.object)
 		self:check_target_selector()
 
@@ -106,7 +106,7 @@ function action_smartcover_activity:check_target_selector()
 	--	printf("DEFAULT_BEHAVIOUR")
 	--	return
 	--end
-	if self.cover_state == "nil" then
+	if (self.cover_state == nil or self.cover_state == "" or self.cover_state == "nil") then
 		object:set_smart_cover_target_selector()
 	else
 		object:set_smart_cover_target_selector(self.target_selector, self)
@@ -117,9 +117,9 @@ end
 function action_smartcover_activity:check_target()
 	local object = self.object
 
-	local target_path = xr_logic.pick_section_from_condlist(db.actor, self.object, self.target_path_condlist)
+	local target_path = self.target_path_condlist and xr_logic.pick_section_from_condlist(db.actor, self.object, self.target_path_condlist)
 
-	if target_path ~= "nil" and target_path ~= nil then
+	if (target_path and target_path ~= "" and target_path ~= "nil") then
 		self.target_path, used = get_param_string(target_path, object)
 		if self.target_path ~= "nil" then
 			if level.patrol_path_exists(self.target_path) then
@@ -214,7 +214,6 @@ function add_to_binder(npc, ini, scheme, section, storage)
 
 	local new_action = this.action_smartcover_activity(npc, "action_smartcover_activity", storage)
 	new_action:add_precondition(world_property(stalker_ids.property_alive, true))
-	new_action:add_precondition(world_property(stalker_ids.property_anomaly,false))
 	new_action:add_precondition(world_property(properties["need_smartcover"], true))
 	new_action:add_precondition(world_property(properties["use_smartcover_in_combat"], false))
 	new_action:add_precondition(world_property(stalker_ids.property_enemy,false))
@@ -233,7 +232,6 @@ function add_to_binder(npc, ini, scheme, section, storage)
 
 	new_action = this.action_smartcover_activity(npc, "action_combat_smartcover", storage)
 	new_action:add_precondition(world_property(stalker_ids.property_alive, true))
-	new_action:add_precondition(world_property(stalker_ids.property_anomaly,false))
 	new_action:add_precondition(world_property(properties["need_smartcover"], true))
 	new_action:add_precondition(world_property(properties["use_smartcover_in_combat"], true))
 

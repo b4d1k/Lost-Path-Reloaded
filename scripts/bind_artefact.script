@@ -1,9 +1,6 @@
 --'******************************************************
 --'*  Биндер объекта артефакт .
 --'******************************************************
-function printf()
-end
-
 function bind(obj)
 	obj:bind_object(artefact_binder(obj))
 end
@@ -12,8 +9,8 @@ class "artefact_binder" (object_binder)
 function artefact_binder:__init(obj) super(obj)
 	db.storage[self.object:id()] = { }
 end
-function artefact_binder:net_spawn(server_object)
-	if not object_binder.net_spawn(self, server_object) then
+function artefact_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 	db.add_obj(self.object)
@@ -29,52 +26,53 @@ function artefact_binder:net_spawn(server_object)
 
 	self.first_call = true
 	
-	local m_data = alife_storage_manager.get_state()
-	if (m_data and m_data.artefact_condition and m_data.artefact_condition[self.object:id()]) then 
-		self.object:set_condition(tonumber(m_data.artefact_condition[self.object:id()]) or 1)
-		m_data.artefact_condition[self.object:id()] = nil
-	end
-
 	return true
 end
 function artefact_binder:update(delta)
 	object_binder.update(self, delta)
-	printf("pl:art [%s] pos %s", self.object:name(), vec_to_str(self.object:position()))
+	--printf("pl:art [%s] pos %s", self.object:name(), vec_to_str(self.object:position()))
 	
     if self.first_call == true then
-    		local ini = self.object:spawn_ini()
-			if not (ini and ini:section_exist("fixed_bone")) then
-				return
+		self.first_call = false
+		
+		local se_obj = alife_object(self.object:id())
+		if (se_obj) then
+			local m_data = alife_storage_manager.get_se_obj_state(se_obj)
+			if (m_data and m_data.offline_condition) then
+				self.object:set_condition(tonumber(m_data.offline_condition) or 0.9999999)
+				m_data.offline_condition = nil
 			end
-    		local bone_name = ini:r_string_ex("fixed_bone", "name")
-    
-            local ph_shell = self.object:get_physics_shell()
-            if not ph_shell then
-                  --printf("no ph shell")
-                  return
-            end
-
-            local ph_element = ph_shell:get_element_by_bone_name(bone_name)
-
-            if ph_element:is_fixed() then
-                    --printf("OBJECT FIXED")
-            else
-                    --printf("FIXING OBJECT")
-                    ph_element:fix()
-            end
-            self.first_call = false
+		end
+		
+		local ini = self.object:spawn_ini()
+		if (ini and ini:section_exist("fixed_bone")) then
+			local bone_name = ini:r_string_ex("fixed_bone", "name")
+			local ph_shell = self.object:get_physics_shell()
+			if ph_shell then
+				local ph_element = ph_shell:get_element_by_bone_name(bone_name)
+				if not ph_element:is_fixed() then
+					ph_element:fix()
+				end
+			end
+		end
     end	
-	
 end
-function artefact_binder:net_destroy(server_object)
+function artefact_binder:net_destroy(se_abstract)
 	db.del_obj(self.object)
 	object_binder.net_destroy(self)
-	
-	if (self.object:condition() < 1) then
-		local m_data = alife_storage_manager.get_state()
-		if not (m_data.artefact_condition) then 
-			m_data.artefact_condition = {}
+end
+
+function artefact_binder:load(stpk)
+	object_binder.load(self,stpk)
+end
+
+function artefact_binder:save(stpk)
+	object_binder.save(self,stpk)
+	local se_obj = alife_object(self.object:id())
+	if (se_obj) then
+		local m_data = alife_storage_manager.get_se_obj_state(se_obj)
+		if (m_data) then 
+			m_data.offline_condition = self.object:condition()
 		end
-		m_data.artefact_condition[self.object:id()] = self.object:condition()
 	end
 end

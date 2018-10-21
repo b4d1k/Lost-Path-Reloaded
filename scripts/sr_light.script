@@ -1,6 +1,7 @@
 local light_zones = {}
 
 local indoor_levels = {
+	labx8				 	= true,
 	jupiter_underground 	= true,
 
 	-- Call of Chernobyl
@@ -151,7 +152,7 @@ function check_light(stalker)
 			end
 		else
 			local sim = alife()
-			sim:create("device_torch", vector(), 0, 0, stalker:id())
+			sim:create("device_torch", vector():set(0,0,0), 0, 0, stalker:id())
 		end
 	else
 		if (torch) then

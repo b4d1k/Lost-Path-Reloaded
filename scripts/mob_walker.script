@@ -180,11 +180,9 @@ function mob_walker:waypoint_callback(obj, action_type, index)
 		end
 
 		local suggested_anim_set = self.path_look_info[pt_chosen_idx]["a"]
-		if suggested_anim_set then
-			if suggested_anim_set == "nil" then
-				suggested_anim_set = nil
-			end
-			self.cur_anim_set = anim[xr_logic.pick_section_from_condlist(db.actor, self.object, suggested_anim_set)] or default_anim_standing
+		if (suggested_anim_set and suggested_anim_set ~= "nil" and suggested_anim_set ~= "") then
+			local result = xr_logic.pick_section_from_condlist(db.actor, self.object, suggested_anim_set)
+			self.cur_anim_set = result and anim[result] or default_anim_standing
 		else
 			self.cur_anim_set = default_anim_standing
 		end

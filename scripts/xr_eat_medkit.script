@@ -23,9 +23,10 @@ function on_game_start()
 	eating.medkit_delay = {}
 	eating.bandage_delay = {}
 	local ranks = alun_utils.get_rank_list()
-	for k,v in ipairs(ranks) do
-		eating.medkit_delay[v] = alun_utils.parse_list(ini,v,"medkit_delay")
-		eating.bandage_delay[v] = alun_utils.parse_list(ini,v,"bandage_delay")
+	for i=1,#ranks do 
+		local rn = ranks[i]
+		eating.medkit_delay[rn] = alun_utils.parse_list(ini,rn,"medkit_delay")
+		eating.bandage_delay[rn] = alun_utils.parse_list(ini,rn,"bandage_delay")
 	end
 	ini = nil
 end

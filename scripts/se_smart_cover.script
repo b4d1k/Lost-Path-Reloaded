@@ -16,10 +16,7 @@ end
 function se_smart_cover:STATE_Write (packet)
 	cse_smart_cover.STATE_Write (self, packet)
 	packet:w_stringZ(tostring(self.last_description))
-	local n = 0
-	for k,v in pairs (self.loopholes) do
-		n = n + 1
-	end
+	local n = table.size(self.loopholes)
 	packet:w_u8(n)
 	for k,v in pairs (self.loopholes) do
 		packet:w_stringZ(k)
@@ -91,7 +88,7 @@ function se_smart_cover:on_register()
 --	printf("smart_cover [%s] is registered lvlid [%s] lvid[%s]", self:name(), tostring(level_id), tostring(self.m_level_vertex_id))
 end
 function se_smart_cover:on_unregister()
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 	local name = self.dynamic_name or self:name()
 	registered_smartcovers[name] = nil
 	local level_id = game_graph():vertex(self.m_game_vertex_id):level_id()

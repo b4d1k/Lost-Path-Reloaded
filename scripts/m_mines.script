@@ -24,12 +24,12 @@ local m_mine_table = 	{
 
 
 function add_actor_mine(m)
-	table.insert(actor_placed_mines, m:id())
+	actor_placed_mines[#actor_placed_mines+1] = m:id()
 	m_mine_table.recently_placed = m:id()
 end
 
 function add_neutral_mine(m)
-	table.insert(neutral_placed_mines, m:id())
+	neutral_placed_mines[#neutral_placed_mines+1] = m:id()
 end
 
 
@@ -39,10 +39,10 @@ local function evaluate_actor_mines(npc,st)
 	end
 
 	local tg = time_global()
-	st.__timer_mine = not st.__timer_mine and tg+100 or st.__timer_mine
-	if (tg < st.__timer_mine) then
+	if (st.__timer_mine and tg < st.__timer_mine) then
 		return
 	end
+	st.__timer_mine = tg + 100
 
 	st.__index_mine = not st.__index_mine and 1 or st.__index_mine > #actor_placed_mines and 1 or st.__index_mine
 
@@ -50,6 +50,14 @@ local function evaluate_actor_mines(npc,st)
 	local actor_mine = mid and level.object_by_id(mid)
 
 	if not (actor_mine) then
+		table.remove(actor_placed_mines,st.__index_mine)
+		st.__index_mine = 1
+		return
+	end
+	
+	-- Despawn the mine if it fell under the map.
+	if (actor_mine:position().y <= level.get_bounding_volume().min.y) then
+		alife():release(alife_object(actor_mine:id(), true))
 		table.remove(actor_placed_mines,st.__index_mine)
 		st.__index_mine = 1
 		return
@@ -74,7 +82,7 @@ local function evaluate_actor_mines(npc,st)
 			h.type = hit.fire_wound
 			h.power = 0.0
 			h.impulse = 0.0
-			h.direction = vector():set(0,1,0)
+			h.direction = VEC_Y
 			h.draftsman = db.actor
 			npc:hit(h)
 		end
@@ -169,6 +177,7 @@ local function actor_on_item_use(itm)
    		local se_obj = alife():create("mine_actor",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id())
 		if (se_obj) then
 			m_mine_table.priming[se_obj.id] = game.get_game_time()
+			level.map_add_object_spot_ser(se_obj.id, "ui_pda2_player_mine_location", game.translate_string("st_wpn_mine_name"))
 		end
 	end
 end

@@ -13,10 +13,7 @@ function CRandomTask:save(packet)
 	end 
 	
 	set_save_marker(packet, "save", false, "CRandomTask")
-	local n = 0
-	for k,v in pairs(self.task_info) do
-		n = n + 1
-	end
+	local n = table.size(self.task_info)
 	packet:w_u16(n)
 	for k,v in pairs(self.task_info) do
 		packet:w_stringZ(k)
@@ -194,10 +191,14 @@ function task_callback(tsk, state)
 		
 		if (rtask.cancelled_by_actor) then
 			xr_statistic.inc_counter("tasks_cancelled")
-			xr_logic.pick_section_from_condlist(db.actor, db.actor, rtask.on_cancel)
+			if (rtask.on_cancel) then
+				xr_logic.pick_section_from_condlist(db.actor, db.actor, rtask.on_cancel)
+			end
 		else
 			xr_statistic.inc_counter("tasks_failed")
-			xr_logic.pick_section_from_condlist(db.actor, db.actor, rtask.on_fail)
+			if (rtask.on_fail) then
+				xr_logic.pick_section_from_condlist(db.actor, db.actor, rtask.on_fail)
+			end
 		end
 		
 		if (rtask.repeat_timeout) then
@@ -210,7 +211,9 @@ function task_callback(tsk, state)
 			tm.task_info[id] = nil
 		end
 	elseif (state == task.completed) then 
-		xr_logic.pick_section_from_condlist(db.actor, db.actor, rtask.on_complete)
+		if (rtask.on_complete) then
+			xr_logic.pick_section_from_condlist(db.actor, db.actor, rtask.on_complete)
+		end
 		rtask:give_reward()
 		rtask.status = "completed"
 		xr_statistic.inc_counter("tasks_completed")

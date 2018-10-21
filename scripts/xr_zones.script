@@ -25,8 +25,8 @@ function script_zone_binder:__init(obj) super(obj)
 
 end 
 
-function script_zone_binder:net_spawn(se_obj)
-	if not object_binder.net_spawn(self, se_obj) then
+function script_zone_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 
@@ -67,8 +67,8 @@ function arena_zone_binder:__init(obj) super(obj)
 	self.saved_obj = {}
 	arena_zones[obj:name()] = self
 end
-function arena_zone_binder:net_spawn(server_object)
-	if not object_binder.net_spawn(self, server_object) then
+function arena_zone_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 

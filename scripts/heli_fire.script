@@ -1,7 +1,6 @@
 --[[------------------------------------------------------------------------------------------------
 Helicopter combat
 Андрущенко Иван
-
 --------------------------------------------------------------------------------------------------]]
 local heli_firer = {}
 
@@ -18,7 +17,6 @@ function heli_fire:__init(obj)
 	self.obj            = obj
     self.enemy_         = nil
     self.fire_point     = nil
-    self.enemy          = nil
     self.enemy_id       = nil
     self.flag_by_enemy  = true
     self.hit_count      = 0
@@ -32,25 +30,26 @@ end
 
 function heli_fire:update_enemy_state()
     local heli = self.obj:get_helicopter()
+	local enemy = self.enemy_id and db.storage[self.enemy_id] and db.storage[self.enemy_id].object
 --'    printf("update_enemy_state()")
     if self.hit_count > 2 then
         self.hit_count = 0
         self.flag_by_enemy  = true
     end
-    if self.enemy and self.enemy_die and self.enemy_ == "all" then
+    if enemy and self.enemy_die and self.enemy_ == "all" then
         self:update_enemy_arr()
     end
-    if self.enemy and time_global() - self.enemy_time > self.upd_vis * 1000 then
+    if enemy and time_global() - self.enemy_time > self.upd_vis * 1000 then
         --'printf("self.upd_vis  = %d", self.upd_vis);
-        if not heli:isVisible( self.enemy )then
+        if not heli:isVisible( enemy )then
             if self.enemy_ == "all" then
                 self:update_enemy_arr()
             end
         end
         self.enemy_time = time_global()
     end
-    if self.enemy then
-        if not heli:isVisible( self.enemy )then
+    if enemy then
+        if not heli:isVisible( enemy )then
             self.flag_by_enemy = true
         end
     end
@@ -59,51 +58,51 @@ function heli_fire:update_enemy_state()
 end
 
 function heli_fire:set_enemy()
-
+	local enemy = self.enemy_id and db.storage[self.enemy_id] and db.storage[self.enemy_id].object
     local heli = self.obj:get_helicopter()
     if self.flag_by_enemy then
         heli:ClearEnemy()
         --'printf("ClearEnemy()")
         self.enemy_die = false
-        if self.enemy then
-		    if heli:isVisible( self.enemy ) then
-			    heli:SetEnemy( self.enemy)
+        if enemy then
+		    if heli:isVisible( enemy ) then
+			    heli:SetEnemy( enemy)
                 self.flag_by_enemy = false
 		    end
         else
             if self.enemy_ then
 		        if self.enemy_ == "actor" then
     		        if db.actor then
-                        self.enemy = db.actor
+                        enemy = db.actor
                     end
                 else
                     if self.enemy_ == "all" then
                         self:update_enemy_arr()
                     else
                         if self.enemy_ ~= "nil" then
-							self.enemy = get_story_object(self.enemy)
-                            self.enemy_id = self.enemy and self.enemy:id()
+							enemy = get_story_object(self.enemy_)
+                            self.enemy_id = enemy and enemy:id()
                         end
                     end
                 end
             end
-            if self.enemy then
-                heli:SetEnemy( self.enemy)
-                --'printf("set_enemy(self.enemy, actor or SID)")
+            if enemy then
+                heli:SetEnemy(enemy)
+                --'printf("set_enemy(enemy, actor or SID)")
             else
                 self.enemy_die = true
             end
             self.flag_by_enemy = false
         end
     end
-    if not self.enemy_die and self.enemy:death_time() > 0 then
-        --'printf("ClearEnemy()")
+	if (self.enemy_die) then 
+		if (self.fire_point) then 
+			heli:SetEnemy(self.fire_point)
+		end
+	elseif (enemy and enemy:death_time() > 0) then 
         heli:ClearEnemy()
         self.enemy_die = true
-    end
-    if self.enemy_die and self.fire_point then
-        heli:SetEnemy(self.fire_point)
-    end
+	end
 end
 
 function heli_fire:update_enemy_arr()
@@ -111,16 +110,15 @@ function heli_fire:update_enemy_arr()
     local heli = self.obj:get_helicopter()
     local index = 0
     local min_dist2D = 65000
-   --' printf("heli_enemy_count=%d", db.heli_enemy_count)
-   local size = #db.heli_enemies
-   local id,enemy
+	--' printf("heli_enemy_count=%d", db.heli_enemy_count)
+	local size = #db.heli_enemies
     while index < size do
-		id = db.heli_enemies[index]
-		enemy = id and db.storage[id] and db.storage[id].object
+		local id = db.heli_enemies[index]
+		local enemy = id and db.storage[id] and db.storage[id].object
         if enemy then
             if heli:isVisible(enemy) then
                 if distance_2d( self.obj:position(), enemy:position() ) < min_dist2D then
-                    self.enemy = enemy
+                    self.enemy_id = enemy:id()
                     min_dist2D = distance_2d( self.obj:position(), enemy:position() )
                     self.flag_by_enemy  = true
                 end
@@ -130,7 +128,7 @@ function heli_fire:update_enemy_arr()
     end
     if heli:isVisible( db.actor ) and random_choice( false, true) or size==0 then
         if distance_2d( self.obj:position(), db.actor:position() ) <= min_dist2D*2 then 
-            self.enemy = db.actor
+            self.enemy_id = db.actor:id()
             min_dist2D = distance_2d( self.obj:position(), db.actor:position() )
         end
     end

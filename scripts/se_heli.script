@@ -21,7 +21,7 @@ function se_heli:on_register()
 end
 
 function se_heli:on_unregister()
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 		
 	se_helicopters[self.id] = nil
 
@@ -52,7 +52,7 @@ function se_heli:clear_smart_terrain()
 	self.m_smart_terrain_id = nil
 	local st = db.storage[self.id]
 	if (st and st.object) then
-		axr_logic.reset_logic(st.object,st)
+		xr_logic.reset_logic(st.object,st)
 	end
 end
 

@@ -165,10 +165,10 @@ end
 
 function arena_rank_check_true (first_speaker, second_speaker)
 	if has_alife_info("bar_arena_fight_6_done") or has_alife_info("bar_arena_fight_3_done") then
-		if has_alife_info("bar_arena_fight_3_done") and (db.actor:character_rank() > 1499) and not(has_alife_info("bar_arena_fight_6_done")) then
+		if has_alife_info("bar_arena_fight_3_done") and (db.actor:character_rank() > 2999) and not(has_alife_info("bar_arena_fight_6_done")) then
 			return true
 		end
-	elseif has_alife_info("bar_arena_fight_6_done") and (db.actor:character_rank() > 2999) then
+	elseif has_alife_info("bar_arena_fight_6_done") and (db.actor:character_rank() > 5999) then
 		return true 	
 	else 
 		return false

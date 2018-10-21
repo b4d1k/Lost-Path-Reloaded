@@ -13,7 +13,7 @@ actor_statistic = {
 					enemies_surrendered = 0,
 					favorite_weapon_sect = nil,
 					field_dressings = 0,
-					stashes_found = 0,
+					guide_articles = {},
 					heli_kills = 0,
 					heli_rocket_kills = 0,
 					help_wounded = 0,
@@ -21,13 +21,13 @@ actor_statistic = {
 					killed_stalkers = 0,
 					level_changes = -1, -- Increases on start relocation.
 					pdas_delivered = 0,
+					smart_terrain_visited = {},
+					stashes_found = 0,
 					storms = 0,
 					surges = 0,
 					tasks_cancelled = 0,
 					tasks_completed = 0,
 					tasks_failed = 0,
-					guide_articles = {},
-					smart_terrain_visited = {},
 					visited = { 
 								["jupiter"] = false,
 								["k00_marsh"] = false,
@@ -63,59 +63,40 @@ actor_statistic = {
 								["l13u_warlab"] = false,
 						}
 				}
-
-monster_classes = {
-			[clsid.bloodsucker_s] 	  = "bloodsucker",
-			[clsid.boar_s] 			  = "boar",
-			[clsid.burer_s] 		  = "burer",
-			[clsid.chimera_s] 		  = "chimera",
-			[clsid.controller_s] 	  = "controller",
-			[clsid.dog_s] 			  = "dog",
-			[clsid.flesh_s] 		  = "flesh",
-			[clsid.gigant_s] 		  = "gigant",
-			[clsid.poltergeist_s] 	  = "poltergeist",
-			[clsid.psy_dog_s] 		  = "psy_dog",
-			[clsid.pseudodog_s]		  = "pseudodog",
-			[clsid.snork_s ] 		  = "snork",
-			[clsid.tushkano_s ] 	  = "tushkano",
-			[clsid.cat_s]			  = "cat",
-			[clsid.rat_s]			  = "rat",
-			[clsid.rat]			  	  = "rat",
-			[clsid.zombie_s]		  = "zombie",
-			[clsid.fracture_s]		  = "fracture"
-		}
-
+				
 rank_rep = {
 			-- Gameplay mechanics.
-			achievements		=	{rnk=0,		rpt=0},
-			arena_battles		=	{rnk=25,	rpt=100},
-			artefacts_found		=	{rnk=5,		rpt=0},
+			achievements		=	{rnk=0,		rpt=0},		-- Not used; see below.
+			arena_battles		=	{rnk=25,	rpt=10},
 			artefacts_detected	=	{rnk=5,		rpt=0},
-			surges				=	{rnk=5,		rpt=0},
-			field_dressings		=	{rnk=1,		rpt=0},
+			artefacts_found		=	{rnk=5,		rpt=0},
 			boxes_smashed		=	{rnk=1,		rpt=0},
 			enemies_surrendered	=	{rnk=10,	rpt=0},
-			level_changes		=	{rnk=0,		rpt=0},
-			storms				=	{rnk=5,		rpt=0},
-			tasks_completed		=	{rnk=25,	rpt=100},
-			tasks_failed		=	{rnk=0,		rpt=-100},
-			tasks_cancelled		=	{rnk=0,		rpt=-100},
+			field_dressings		=	{rnk=1,		rpt=0},
+			guide_articles		=	{rnk=10,	rpt=0},
+			heli_kills			=	{rnk=50,	rpt=25},
+			heli_rocket_kills	=	{rnk=25,	rpt=0},		-- Extra points.
+			help_wounded		=	{rnk=10,	rpt=10},
 			killed_monsters		=	{rnk=5,		rpt=0},
-			killed_stalkers		=	{rnk=0,		rpt=0}, -- Not used in vanilla CoC, see below.
+			killed_stalkers		=	{rnk=0,		rpt=0},		-- Not used; see below.
+			level_changes		=	{rnk=0,		rpt=0},
+			pdas_delivered		=	{rnk=10,	rpt=10},
 			stashes_found		=	{rnk=10,	rpt=0},
-			pdas_delivered		=	{rnk=10,	rpt=20},
-			heli_kills			=	{rnk=100,	rpt=50},
-			heli_rocket_kills	=	{rnk=50,	rpt=50},
-			help_wounded		=	{rnk=10,	rpt=50},
+			storms				=	{rnk=5,		rpt=0},
+			surges				=	{rnk=5,		rpt=0},
+			tasks_cancelled		=	{rnk=0,		rpt=-25},
+			tasks_completed		=	{rnk=50,	rpt=25},
+			tasks_failed		=	{rnk=0,		rpt=-25},
 			
-			-- Gained or lost reputation based on player's faction's relations.
+			-- Gained or lost reputation based on player's faction relations.
 			-- Rank is instead handled in 'rank_kill_points' in game_relations.ltx.
-			killed_enemy		=	{rnk=0,		rpt=20},
-			killed_friend		=	{rnk=0,		rpt=-150},
-			killed_neutral		=	{rnk=0,		rpt=-100},
+			killed_enemy		=	{rnk=0,		rpt=10},
+			killed_friend		=	{rnk=0,		rpt=-100},
+			killed_neutral		=	{rnk=0,		rpt=-75},
 			
 			-- Achievements. (Individual)
 			-- Global value can be defined above.
+			bookworm_food 		=	{rnk=25,	rpt=0},
 			completionist 		=	{rnk=50,	rpt=0},
 			down_to_earth		=	{rnk=25,	rpt=0},
 			duga_free			=	{rnk=25,	rpt=0},
@@ -228,14 +209,20 @@ end
 
 function inc_achievement(achievement)
 	inc_counter("achievements")
-	inc_actor_rank(rank_rep[achievement].rnk)
-	inc_actor_rank(rank_rep[achievement].rpt)
+	if rank_rep[achievement] then
+		inc_actor_rank(rank_rep[achievement].rnk)
+		inc_actor_reputation(rank_rep[achievement].rpt)
+	end
 end
 
 function inc_counter(statistic)
-	actor_statistic[statistic] = actor_statistic[statistic] + 1
-	inc_actor_rank(rank_rep[statistic].rnk)
-	inc_actor_rank(rank_rep[statistic].rpt)
+	if actor_statistic[statistic] and type(actor_statistic[statistic]) == "number" then
+		actor_statistic[statistic] = actor_statistic[statistic] + 1
+	end
+	if rank_rep[statistic] then
+		inc_actor_rank(rank_rep[statistic].rnk)
+		inc_actor_reputation(rank_rep[statistic].rpt)
+	end
 end
 
 function inc_counter_artefacts(art_id)
@@ -289,13 +276,14 @@ function set_best_weapon(hit_amount)
 		return
 	end
 
-	-- A section called 'parent_section' is used by AO3 and STCoP.
+	-- A section called 'parent_section' is used by AO3 and CWP.
 	-- It tells them which weapon is the 'parent' of a modified weapon.
 	-- Example: An AK-74 with an EKP sight attach has a parent_section of 'wpn_ak74'.
 	local parent_section = system_ini():r_string_ex(active_item:section(), "parent_section") or active_item:section()
 
 	-- By using this section we can have stats 'stack' for weapons regardless of attached scopes.
 	-- Of course if this section does not exist then it will just default to the weapon section name instead.
+	hit_amount = utils.clamp(hit_amount/100,0,1)
 	weapons_table[parent_section] = weapons_table[parent_section] and weapons_table[parent_section] + hit_amount or hit_amount
 
 	for sec,v in spairs(weapons_table, function(t,a,b) return t[b] < t[a] end) do
@@ -477,17 +465,17 @@ local ranks, reputations = {}, {}
 function init_ranks_reps()
 	local function parse_str(s)
 		local t = {}
-		for name in string.gmatch( s, "([%w_%-.\\]+)[%,%s]*" ) do table.insert( t, name ) end
+		for name in string.gmatch( s, "([%w_%-.\\]+)[%,%s]*" ) do t[#t+1] = name end
 		return t
 	end
 	local ini = ini_file("creatures\\game_relations.ltx")
 	local tbl = parse_str(ini:r_string_ex("game_relations","rating"))
 	local tbl2 = parse_str(ini:r_string_ex("game_relations","reputation"))
 	for i=2, #tbl, 2 do
-		table.insert(ranks, tonumber(tbl[i]))
+		ranks[#ranks+1] = tonumber(tbl[i])
 	end
 	for i=2, #tbl2, 2 do
-		table.insert(reputations, tonumber(tbl2[i]))
+		reputations[#reputations+1] = tonumber(tbl2[i])
 	end
 end
 
@@ -499,9 +487,9 @@ function inc_actor_rank(rank)
 	
 	-- Impose restrictions at double the minimum and maximum rank values.
 	if (db.actor:character_rank() < 0) then db.actor:set_character_rank(0) end
-	if (db.actor:character_rank() > 28000) then db.actor:set_character_rank(28000) end
+	if (db.actor:character_rank() > 56000) then db.actor:set_character_rank(56000) end
 	
-	-- Check whether to notify the player.
+	-- Check for actor rank change.
 	check_actor_rank_change()
 	
 	-- Display scripted rank increases if debug hud is enabled.
@@ -511,7 +499,7 @@ function inc_actor_rank(rank)
 end
 
 -- Check for actor rank change.
-function check_actor_rank_change()
+function check_actor_rank_change(suppress)
 	local current_rank = db.actor:character_rank()
 	local new, old = 0, 0
 	for i=1,#ranks do
@@ -522,10 +510,12 @@ function check_actor_rank_change()
 		if actor_statistic.actual_rank <= ranks[i] then break end
 		old = old + 1
 	end
-	if old > new then
-		news_manager.send_tip(db.actor, "st_rank_decreased", nil, "rank_change", nil, nil)
-	elseif new > old then
-		news_manager.send_tip(db.actor, "st_rank_increased", nil, "rank_change", nil, nil)
+	if not suppress or suppress == false then
+		if old > new then
+			news_manager.send_tip(db.actor, "st_rank_decreased", nil, "rank_change", nil, nil)
+		elseif new > old then
+			news_manager.send_tip(db.actor, "st_rank_increased", nil, "rank_change", nil, nil)
+		end
 	end
 	actor_statistic.actual_rank = current_rank
 end
@@ -540,7 +530,7 @@ function inc_actor_reputation(reputation)
 	if (db.actor:character_reputation() < -5000) then db.actor:set_character_reputation(-5000) end
 	if (db.actor:character_reputation() > 5000) then db.actor:set_character_reputation(5000) end
 	
-	-- Check whether to notify the player.
+	-- Check for actor reputation change.
 	check_actor_reputation_change()
 	
 	-- Display scripted reputation increases if debug hud is enabled.
@@ -550,7 +540,7 @@ function inc_actor_reputation(reputation)
 end
 
 -- Check for actor reputation change.
-function check_actor_reputation_change()
+function check_actor_reputation_change(suppress)
 	local current_reputation = db.actor:character_reputation()
 	local new, old = 0, 0
 	for i=1,#reputations do
@@ -561,10 +551,12 @@ function check_actor_reputation_change()
 		if actor_statistic.actual_reputation <= reputations[i] then break end
 		old = old + 1
 	end
-	if old > new then
-		news_manager.send_tip(db.actor, "st_reputation_decreased", nil, "rep_change", nil, nil)
-	elseif new > old then
-		news_manager.send_tip(db.actor, "st_reputation_increased", nil, "rep_change", nil, nil)
+	if not suppress or suppress == false then
+		if old > new then
+			news_manager.send_tip(db.actor, "st_reputation_decreased", nil, "rep_change", nil, nil)
+		elseif new > old then
+			news_manager.send_tip(db.actor, "st_reputation_increased", nil, "rep_change", nil, nil)
+		end
 	end
 	actor_statistic.actual_reputation = current_reputation
  end

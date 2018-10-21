@@ -11,7 +11,7 @@ zone_by_name        = {}
 script_ids			= {}
 storage             = {}
 actor               = nil
-actor_proxy         = actor_proxy.actor_proxy()
+--actor_proxy         = actor_proxy.actor_proxy()
 heli                = {}
 camp_storage        = {}
 story_by_id	        = {}
@@ -19,7 +19,7 @@ smart_terrain_by_id = {}
 info_restr          = {}
 heli_enemies        = {}
 anim_obj_by_name	= {}
-goodwill 			= {sympathy = {}, relations = {}}
+goodwill 			= {sympathy = {}}
 story_object		= {}
 signal_light		= {}
 offline_objects		= {}
@@ -29,9 +29,16 @@ no_weap_zones 		= {}
 spawned_vertex_by_id= {}
 dynamic_ltx			= {}
 vehicle				= nil
+actor_inside_zones 	= {}		-- only because some sr have complex shape and this also easier to see what restrictor actor in for debug
 
 function add_enemy(obj)
-	table.insert(heli_enemies,obj:id())
+	local id = obj:id()
+	for i,v in ipairs(heli_enemies) do 
+		if (v == id) then 
+			return 
+		end
+	end
+	heli_enemies[#heli_enemies+1] = id
 end
 
 function delete_enemy(obj)
@@ -80,13 +87,13 @@ end
 
 function add_actor( obj )
 	actor = obj
-	actor_proxy:net_spawn( obj )
+	--actor_proxy:net_spawn( obj )
 	add_obj( obj )
 end
 
 function del_actor()
 	del_obj( actor )
-	actor_proxy:net_destroy()
+	--actor_proxy:net_destroy()
 	actor = nil
 end
 
@@ -119,12 +126,13 @@ function del_anim_obj(anim_obj)
 end
 
 function add_stalker(npc)
-	for i=#db.OnlineStalkers,1,-1 do
-		if (npc:id() == db.OnlineStalkers[i]) then
-			return
+	local id = npc:id()
+	for i,v in ipairs(db.OnlineStalkers) do 
+		if (v == id) then 
+			return 
 		end
 	end
-	table.insert(db.OnlineStalkers,npc:id())
+	db.OnlineStalkers[#db.OnlineStalkers+1] = id
 end
 
 function del_stalker(npc)

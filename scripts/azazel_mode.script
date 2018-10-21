@@ -40,14 +40,14 @@ function actor_on_before_death(whoID,flags)
 	--local faction_mates = {}
 	for i=1,65534 do 
 		local se_obj = sim:object(i)
-		if (se_obj and IsStalker(nil,se_obj:clsid()) and se_obj:alive() and se_obj:community() ~= "zombied" and se_obj.group_id ~= 65535) then 
+		if (se_obj and IsStalker(nil,se_obj:clsid()) and se_obj:alive() and se_obj:community() ~= "zombied" and se_obj:community() ~= "trader" and se_obj.group_id ~= 65535) then 
 			if (IsSurvivalMode() or get_object_story_id(se_obj.group_id) == nil) then
 				if (axr_companions.companion_squads[se_obj.group_id]) then 
-					table.insert(squad_mates,se_obj.id)
+					squad_mates[#squad_mates+1] = se_obj.id
 				--elseif (se_obj:community() == character_community(db.actor):sub(7)) then 
 					--table.insert(faction_mates,se_obj.id)
 				else
-					table.insert(avail_entities,se_obj.id)
+					avail_entities[#avail_entities+1] = se_obj.id
 				end
 			end
 		end
@@ -71,6 +71,7 @@ function actor_on_before_death(whoID,flags)
 		["wpn_binoc"] = true,
 		["medkit_script"] = true,
 		["guitar_a"] = true,
+		["guitar_a2"] = true,
 		["harmonica_a"] = true,
 		["anim_binoc"] = true,
 		["anim_knife"] = true,
@@ -79,16 +80,22 @@ function actor_on_before_death(whoID,flags)
 		["stick_bred"] = true,
 		["stick_kolbasa"] = true,
 		["stick_kolbasa_bred"] = true,
-		["wpn_knife"] = true--,
-		-- ["good_psy_helmet"] = true,
-		-- ["bad_psy_helmet"] = true,
-		-- ["main_story_1_quest_case"] = true,
-		-- ["main_story_2_lab_x18_documents"] = true,
-		-- ["main_story_3_lab_x16_documents"] = true,
-		-- ["main_story_4_lab_x10_documents"] = true,
-		-- ["main_story_5_lab_x8_documents"] = true,
-		-- ["main_story_6_jup_ug_documents"] = true,
-		-- ["main_story_7_mon_con_documents"] = true
+		["wpn_knife"] = true,
+		["wpn_knife_colt"] = true,
+		["wpn_knife_extrema"] = true,
+		["wpn_knife_hunting"] = true,
+		["wpn_knife_spetsnaz"] = true,
+		["wpn_knife_survival"] = true,
+		["wpn_knife_tanto"] = true,
+--		["good_psy_helmet"] = true,
+--		["bad_psy_helmet"] = true,
+--		["main_story_1_quest_case"] = true,
+--		["main_story_2_lab_x18_documents"] = true,
+--		["main_story_3_lab_x16_documents"] = true,
+--		["main_story_4_lab_x10_documents"] = true,
+--		["main_story_5_lab_x8_documents"] = true,
+--		["main_story_6_jup_ug_documents"] = true,
+--		["main_story_7_mon_con_documents"] = true
 	}
 	
 	axr_companions.remove_all_from_actor_squad()
@@ -150,11 +157,16 @@ function actor_on_before_death(whoID,flags)
 	
 	local faction = se_obj:community()
 	se_actor:set_rank(se_obj:rank())
+	db.actor:set_character_rank(se_obj:rank())
 	db.actor:set_character_community("actor_"..faction)
 	db.actor:set_character_reputation(se_obj:reputation())
 	db.actor:give_money(10*math.random(1,250)+500)
 	
 	game_relations.set_community_goodwill_for_faction("actor_"..faction)
+	
+	-- Force update of xr_statistic records.
+	xr_statistic.check_actor_rank_change(true)
+	xr_statistic.check_actor_reputation_change(true)
 	
 	-- copy all items except ignored
 	for i=1,65534 do 
@@ -188,7 +200,7 @@ function actor_on_before_death(whoID,flags)
 			["bandit"] = "bandit_exo_outfit",
 			["csky"] = "cs_heavy_outfit",
 			["killer"] = "merc_scientific_outfit",
-			["army"] = "specops_outfit",
+			["army"] = "commander_outfit",
 			["dolg"] = "dolg_scientific_outfit",
 			["freedom"] = "svoboda_heavy_outfit",
 			["ecolog"] = "ecolog_outfit_orange",
@@ -201,7 +213,7 @@ function actor_on_before_death(whoID,flags)
 			["bandit"] = "trenchcoat_outfit",
 			["csky"] = "cs_light_outfit",
 			["killer"] = "merc_outfit",
-			["army"] = "military_outfit",
+			["army"] = "specops_outfit",
 			["dolg"] = "dolg_outfit",
 			["freedom"] = "svoboda_light_outfit",
 			["ecolog"] = "ecolog_outfit_green",
@@ -226,12 +238,12 @@ function actor_on_before_death(whoID,flags)
 			["stalker"] = "novice_outfit",
 			["bandit"] = "bandit_novice_outfit",
 			["csky"] = "cs_novice_outfit",
-			["killer"] = "merc_novice_outfit",
-			["army"] = "military_novice_outfit",
+			["killer"] = "merc_outfit",
+			["army"] = "army_outfit",
 			["dolg"] = "dolg_novice_outfit",
 			["freedom"] = "svoboda_novice_outfit",
 			["ecolog"] = "ecolog_guard_outfit",
-			["monolith"] = "monolith_novice_outfit"
+			["monolith"] = "monolith_outfit"
 		}
 		give_object_to_actor(f[faction] or "novice_outfit")		
 	end 
@@ -266,10 +278,16 @@ function actor_on_before_death(whoID,flags)
 		safe_release_manager.release(se_obj)
 		alife_storage_manager.get_state().azazel_death = true
 		local function tele_me_now(id)
-			ChangeLevel(pos,lvid,gvid,vector():set(0,0,0))
+			ChangeLevel(pos,lvid,gvid,VEC_ZERO)
 			return true
 		end
 		CreateTimeEvent(0,"tele",0,tele_me_now,se_obj.id)
+	end
+	
+	-- skip surge due to bug with killing actor on switch
+	surge_manager.stop_surge()
+	if (psi_storm_manager.get_psi_storm_manager().started) then
+		psi_storm_manager.get_psi_storm_manager().finish(true)
 	end
 	
 	flags.ret_value = false

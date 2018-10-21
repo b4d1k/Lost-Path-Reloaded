@@ -325,18 +325,18 @@ function geologist_requirements()
 end
 
 -- Heavy Pockets.
--- Requires player to possess 1,000,000 RU.
+-- Requires player to possess 500,000 RU.
 function heavy_pockets_requirements()
 	return (
-				(db.actor:money() >= 1000000)
+				(db.actor:money() >= 500000)
 		)	
 end
 
 -- Infopreneur.
--- Requires player to deliver 25 PDAs.
+-- Requires player to deliver 50 PDAs.
 function infopreneur_requirements()
 	return (
-				(xr_statistic.actor_statistic.pdas_delivered >= 25)
+				(xr_statistic.actor_statistic.pdas_delivered >= 50)
 		)
 end
 
@@ -353,6 +353,7 @@ function mechanized_warfare_requirements()
 			 or (has_alife_info("mar_base_stalker_tech_upgrade_tier_3"))
 			 or (has_alife_info("mil_smart_terrain_7_7_freedom_mechanic_stalker_upgrade_tier_3"))
 			 or (has_alife_info("pri_monolith_monolith_mechanic_stalker_upgrade_tier_3"))
+			 or (has_alife_info("yan_ecolog_kruglov_upgrade_tier_3"))
 			 or (has_alife_info("zat_a2_stalker_mechanic_upgrade_tier_3"))
 		)
 end
@@ -361,7 +362,7 @@ end
 -- Requires rank of 'Legend' be reached.
 function patriarch_requirements()
 	return (
-				(db.actor:character_rank() >= 14000)
+				(db.actor:character_rank() >= 28000)
 		)
 end
 
@@ -427,6 +428,7 @@ function completionist_rewards()
 	db.actor:give_info_portion("achieved_completionist")
 	news_manager.send_tip(db.actor, "st_achievement_10_unlock", nil, "completionist", nil, nil)
 	xr_statistic.inc_achievement("completionist")
+	SendScriptCallback("on_achievement_earned","completionist","st_achievement_10_unlock")
 end
 
 -- Down to Earth.
@@ -436,6 +438,7 @@ function down_to_earth_rewards()
 	db.actor:give_info_portion("achieved_down_to_earth")
 	news_manager.send_tip(db.actor, "st_achievement_12_unlock", nil, "down_to_earth", nil, nil)
 	xr_statistic.inc_achievement("down_to_earth")
+	SendScriptCallback("on_achievement_earned","down_to_earth","st_achievement_12_unlock")
 end
 
 -- Duga Free.
@@ -445,6 +448,7 @@ function duga_free_rewards()
 	db.actor:give_info_portion("achieved_duga_free")
 	news_manager.send_tip(db.actor, "st_achievement_4_unlock", nil, "duga_free", nil, nil)
 	xr_statistic.inc_achievement("duga_free")
+	SendScriptCallback("on_achievement_earned","duga_free","st_achievement_4_unlock")
 end
 
 -- Geologist.
@@ -454,6 +458,7 @@ function geologist_rewards()
 	db.actor:give_info_portion("achieved_geologist")
 	news_manager.send_tip(db.actor, "st_achievement_13_unlock", nil, "geologist", nil, nil)
 	xr_statistic.inc_achievement("geologist")
+	SendScriptCallback("on_achievement_earned","geologist","st_achievement_13_unlock")
 end
 
 -- Heavy Pockets.
@@ -463,6 +468,7 @@ function heavy_pockets_rewards()
 	db.actor:give_info_portion("achieved_heavy_pockets")
 	news_manager.send_tip(db.actor, "st_achievement_1_unlock", nil, "heavy_pockets", nil, nil)
 	xr_statistic.inc_achievement("heavy_pockets")
+	SendScriptCallback("on_achievement_earned","heavy_pockets","st_achievement_1_unlock")
 end
 
 -- Infopreneur.
@@ -472,6 +478,7 @@ function infopreneur_rewards()
 	db.actor:give_info_portion("achieved_infopreneur")
 	news_manager.send_tip(db.actor, "st_achievement_3_unlock", nil, "infopreneur", nil, nil)
 	xr_statistic.inc_achievement("infopreneur")
+	SendScriptCallback("on_achievement_earned","infopreneur","st_achievement_3_unlock")
 end
 
 -- Mechanized Warfare.
@@ -481,6 +488,7 @@ function mechanized_warfare_rewards()
 	db.actor:give_info_portion("achieved_mechanized_warfare")
 	news_manager.send_tip(db.actor, "st_achievement_7_unlock", nil, "mechanized_warfare", nil, nil)
 	xr_statistic.inc_achievement("mechanized_warfare")
+	SendScriptCallback("on_achievement_earned","mechanized_warfare","st_achievement_7_unlock")
 end
 
 -- Patriarch.
@@ -490,6 +498,7 @@ function patriarch_rewards()
 	db.actor:give_info_portion("achieved_patriarch")
 	news_manager.send_tip(db.actor, "st_achievement_14_unlock", nil, "patriarch", nil, nil)
 	xr_statistic.inc_achievement("patriarch")
+	SendScriptCallback("on_achievement_earned","patriarch","st_achievement_14_unlock")
 end
 
 -- Radiotherapy.
@@ -499,6 +508,7 @@ function radiotherapy_rewards()
 	db.actor:give_info_portion("achieved_radiotherapy")
 	news_manager.send_tip(db.actor, "st_achievement_2_unlock", nil, "radiotherapy", nil, nil)
 	xr_statistic.inc_achievement("radiotherapy")
+	SendScriptCallback("on_achievement_earned","radiotherapy","st_achievement_2_unlock")
 end
 
 -- Rag and Bone.
@@ -508,6 +518,7 @@ function rag_and_bone_rewards()
 	db.actor:give_info_portion("achieved_rag_and_bone")
 	news_manager.send_tip(db.actor, "st_achievement_9_unlock", nil, "rag_and_bone", nil, nil)
 	xr_statistic.inc_achievement("rag_and_bone")
+	SendScriptCallback("on_achievement_earned","rag_and_bone","st_achievement_9_unlock")
 end
 
 -- Silver or Lead.
@@ -517,6 +528,7 @@ function silver_or_lead_rewards()
 	db.actor:give_info_portion("achieved_silver_or_lead")
 	news_manager.send_tip(db.actor, "st_achievement_6_unlock", nil, "silver_or_lead", nil, nil)
 	xr_statistic.inc_achievement("silver_or_lead")
+	SendScriptCallback("on_achievement_earned","silver_or_lead","st_achievement_6_unlock")
 end
 
 -- Tourist.
@@ -524,11 +536,13 @@ end
 -- Reputation and rank point increase.
 function tourist_rewards()
 	for i=1,3 do
-		coc_treasure_manager.create_random_stash(nil, "Curious stash", nil)
+		coc_treasure_manager.create_random_stash(nil, "Curious stash", nil, "treasure_unique")
 	end
+	db.actor:disable_info_portion("achieved_tourist_delay")
 	db.actor:give_info_portion("achieved_tourist")
 	news_manager.send_tip(db.actor, "st_achievement_8_unlock", nil, "tourist", nil, nil)
 	xr_statistic.inc_achievement("tourist")
+	SendScriptCallback("on_achievement_earned","tourist","st_achievement_8_unlock")
 end
 
 -- Well Dressed.
@@ -538,6 +552,7 @@ function well_dressed_rewards()
 	db.actor:give_info_portion("achieved_well_dressed")
 	news_manager.send_tip(db.actor, "st_achievement_5_unlock", nil, "well_dressed", nil, nil)
 	xr_statistic.inc_achievement("well_dressed")
+	SendScriptCallback("on_achievement_earned","well_dressed","st_achievement_5_unlock")
 end
 
 -- Wishful Thinking.
@@ -548,4 +563,5 @@ function wishful_thinking_rewards()
 	db.actor:give_info_portion("achieved_wishful_thinking")
 	news_manager.send_tip(db.actor, "st_achievement_11_unlock", nil, "wishful_thinking", nil, nil)
 	xr_statistic.inc_achievement("wishful_thinking")
+	SendScriptCallback("on_achievement_earned","wishful_thinking","st_achievement_11_unlock")
 end

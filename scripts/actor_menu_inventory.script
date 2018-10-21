@@ -44,16 +44,23 @@ function CUIActorMenu_OnItemFocusReceive(itm)
 end
 
 -- called from engine!
+function CUIActorMenu_OnItemFocusLost(itm)
+	SendScriptCallback("CUIActorMenu_OnItemFocusLost",itm)
+end
+
+-- called from engine!
 -- useful for when doing npc:use(db.actor) when NPC is alive
 -- basically what is available in the corpse loot menu while npc is alive
 function CInventory_ItemAvailableToTrade(npc,item)
 	-- if (xr_corpse_detection.lootable_table[item:section()]) then 
 		-- return true
 	-- end
-	if (db.actor:has_info("ui_pda") and npc:has_info("npcx_is_companion")) then
-		local m_data = alife_storage_manager.get_state()
-		if (m_data and m_data.companion_borrow_item and m_data.companion_borrow_item[item:id()]) then
-			return true
+	if (npc:has_info("npcx_is_companion")) then
+		if (ActorMenu.get_menu_mode() == 4) then
+			local m_data = alife_storage_manager.get_state()
+			if (m_data and m_data.companion_borrow_item and m_data.companion_borrow_item[item:id()]) then
+				return true
+			end
 		end
 		return false
 	else
@@ -63,3 +70,18 @@ function CInventory_ItemAvailableToTrade(npc,item)
 end
 
 -- called from engine
+function CUIActorMenu_CanMoveToPartner(obj,itm,actor_weight,partner_weight,item_weight,partner_total_weight,partner_max_carry_weight)
+	--printf("%s [%s actor_weight=%s partner_weight=%s item_weight=%s partner_total_weight=%s partner_max_carry_weight=%s]",obj:name(),itm:name(),actor_weight,partner_weight,item_weight,partner_total_weight,partner_max_carry_weight)
+	
+	if (ActorMenu.get_menu_mode() == 4 and IsStalker(obj) and obj:has_info("npcx_is_companion") and partner_total_weight >= 100) then 
+		return false
+	end
+	
+	return true
+end
+
+-- called from engine during donation. return false to refuse or return true to donate
+function CUIActorMenu_DonateCurrentItem(obj,itm)
+	xr_statistic.inc_actor_reputation(1)
+	return true
+end

@@ -10,7 +10,7 @@ function se_level_changer:on_register()
 end
 --------------------
 function se_level_changer:on_unregister()
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 	cse_alife_level_changer.on_unregister(self)
 end
 --------------------

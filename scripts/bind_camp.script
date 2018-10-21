@@ -15,8 +15,8 @@ end
 function camp_binder:reinit()
 	object_binder.reinit(self)
 end
-function camp_binder:net_spawn(data)
-	if not object_binder.net_spawn( self,data ) then
+function camp_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self,se_abstract) then
 		return false
 	end
 

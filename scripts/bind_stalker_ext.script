@@ -14,6 +14,7 @@ function actor_on_init(binder)
 	SendScriptCallback("actor_on_init",binder)
 end 
 
+ShowMessageTime = nil
 function actor_on_reinit(binder)
 	SendScriptCallback("actor_on_reinit",binder)
 	local function check_hud_msg()
@@ -50,19 +51,21 @@ function actor_on_net_spawn()
 		con:execute("ai_aim_predict_time 0.40")
 	end
 	
+	-- some hacks
 	local sim = alife()
+	local remove_outfits = not db.actor:has_info("remove_outfits_hack")
 	for i=1,65534 do
 		local se_obj = sim:object(i)
-		if (se_obj and se_obj:clsid() == clsid.phantom) then
-			--printf("release phantom")
-			sim:release(se_obj,true)
+		if (se_obj) then
+			-- hack to remove phantoms
+			if (se_obj:clsid() == clsid.phantom) then
+				--printf("release phantom hack!")
+				sim:release(se_obj,true)
+			end
 		end
 	end
-	
-	if (axr_main.config:r_value("mm_options","enable_heli_spawn",1,true) == false) then 
-		for k,v in pairs(se_heli.se_helicopters) do 
-			alife():release(v,true)
-		end
+	if (remove_outfits) then
+		db.actor:give_info_portion("remove_outfits_hack")
 	end
 	
 	SendScriptCallback("on_game_load",binder)
@@ -87,11 +90,15 @@ function actor_on_first_update(binder,delta)
 		surge_manager.get_surge_manager():respawn_artefacts_and_replace_anomaly_zone()
 		m_data.artefact_respawn_levels[level.name()] = false
 	end 
-	invulnerable_time = time_global() + 7000
+	invulnerable_time = invulnerable_time or time_global() + 7000
 	SendScriptCallback("actor_on_first_update",binder,delta)
 end
 
 function actor_on_update(binder,delta)
+	if not (db.actor:alive()) then
+		return
+	end
+	
 	-- WISH GRANTER ZOMBIED-IMMORTALITY
 	if (db.actor:has_info("actor_made_wish_immortal") or invulnerable_time and invulnerable_time > time_global() + 7000) then 
 		db.actor.health = 1
@@ -256,7 +263,7 @@ function actor_on_before_death(binder,whoID)
 	local flags = { ret_value = true }
 	SendScriptCallback("actor_on_before_death",whoID,flags)
 	if (flags.ret_value == true) then 
-		db.actor:kill(db.actor, true)	
+		db.actor:kill(db.actor,true)
 	end
 end
 
@@ -277,7 +284,7 @@ function actor_on_detach_vehicle(binder,obj)
 		if (se_obj) then 
 			alife():release(se_obj)
 		end
-		alife():create("itm_deployable_mgun",vector(),0,0,0)
+		alife():create("itm_deployable_mgun",vector():set(0,0,0),0,0,0)
 	end
 end
 

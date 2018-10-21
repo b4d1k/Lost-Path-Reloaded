@@ -2,7 +2,7 @@
 -- Fast Travel system
 -- author: Alundaio
 ------------------------------
-local enabled = false 			-- change under settings in plugins\faction_quick_travel.ltx
+local enabled = false 			-- change under settings in plugins\quick_travel.ltx
 quick_travel_smarts = nil
 
 local function map_spot_menu_add_property(property_ui,id,level_name)
@@ -30,9 +30,10 @@ local function map_spot_menu_property_clicked(property_ui,id,level_name,prop)
 			return 
 		end 
 		
-		-- Prevent fast travel while overloaded 
+		-- Prevent fast travel while overloaded
+		local backpack = db.actor:item_in_slot(13)
 		local suit = db.actor:item_in_slot(7)
-		local diff = db.actor:get_total_weight() - db.actor:get_actor_max_walk_weight() - (suit and suit:get_additional_max_weight() or 0)
+		local diff = db.actor:get_total_weight() - db.actor:get_actor_max_walk_weight() - (suit and suit:get_additional_max_weight() or 0) - (backpack and backpack:get_additional_max_weight() or 0) - (artefact_degradation.art_weight_add or 0)
 		if diff > 0 then
 			get_hud():HidePdaMenu()
 			SetHudMsg(game.translate_string("st_travel_overloaded"),4)
@@ -61,7 +62,7 @@ local function map_spot_menu_property_clicked(property_ui,id,level_name,prop)
 			return
 		end
 		
-		local dist = db.actor:position():distance_to(se_obj.position)
+		local dist = se_obj.online and db.actor:position():distance_to(se_obj.position) or 1000
 		if (dist <= 50) then 
 			SetHudMsg(game.translate_string("st_travel_already_here"),4)
 			get_hud():HidePdaMenu()
@@ -78,13 +79,13 @@ local function map_spot_menu_property_clicked(property_ui,id,level_name,prop)
 		if (level_name == level.name()) then 
 			db.actor:set_actor_position(se_obj.position)
 		else
-			ChangeLevel(se_obj.position,se_obj.m_level_vertex_id,se_obj.m_game_vertex_id,vector():set(0,0,0))
+			ChangeLevel(se_obj.position,se_obj.m_level_vertex_id,se_obj.m_game_vertex_id,VEC_ZERO)
 		end
 	end
 end
 
 local function on_game_load()
-	local pini = ini_file("plugins\\faction_quick_travel.ltx")
+	local pini = ini_file("plugins\\quick_travel.ltx")
 	enabled = pini:r_bool_ex("settings","enable",false)
 
 	if not (enabled) then 

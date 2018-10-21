@@ -111,7 +111,7 @@ function set_scheme(npc, ini, scheme, section, gulag_name)
 		local elems	= parse_names(offset_str)
 		storage.offset = vector():set(tonumber(elems[1]) or 0, tonumber(elems[2]) or 0, tonumber(elems[3]) or 0)
 	else 
-		storage.offset = vector():set(0,0,0)
+		storage.offset = VEC_Z
 	end
 
 	if not ini:line_exist( section, "on_signal" ) then

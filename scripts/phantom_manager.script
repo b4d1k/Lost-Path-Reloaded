@@ -105,8 +105,8 @@ function Phantom:reinit()
 	object_binder.reinit(self)
 end
 
-function Phantom:net_spawn(sobject)
-	if not object_binder.net_spawn(self, sobject) then
+function Phantom:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 	return true

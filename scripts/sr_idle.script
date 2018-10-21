@@ -16,16 +16,10 @@ end
 
 function action_idle:update(delta)
 	--printf("_br: sr_idle: action_idle:update()")
-
 	--if not xr_logic.is_active(self.object, self.st) then
 	--	return
 	--end
-
-	local actor = db.actor
-
-	if xr_logic.try_switch_to_another_section(self.object, self.st, actor) then
-		return
-	end	
+	xr_logic.try_switch_to_another_section(self.object, self.st, db.actor)
 end
 
 ---------------------------------------------------------------------------------------------------------------------

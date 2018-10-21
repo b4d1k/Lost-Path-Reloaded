@@ -37,11 +37,11 @@ function action_timer:update(delta)
 
 	-- Определяем нужно ли куда то переходить.
 	for k,v in pairs(self.st.on_value) do
-		if (self.st.type == "dec" and value_time <= v.dist) or
-			 (self.st.type == "inc" and value_time >= v.dist)
-		then
-			-- Обработка значения.
-			xr_logic.switch_to_section(self.object, self.st.ini, xr_logic.pick_section_from_condlist(db.actor, self.object, v.state))
+		if (v.state) then
+			if (self.st.type == "dec" and value_time <= v.dist) or (self.st.type == "inc" and value_time >= v.dist)	then
+				-- Обработка значения.
+				xr_logic.switch_to_section(self.object, self.st.ini, xr_logic.pick_section_from_condlist(db.actor, self.object, v.state))
+			end
 		end
 	end
 end
@@ -98,24 +98,20 @@ end
 
 function parse_data(npc,s)
 	local t = {}
-
-		if s then
+	local size_t = 0
+	if s then
 		for name in string.gmatch( s, "(%|*%d+%|[^%|]+)%p*" ) do
-			local dat = {	dist = nil,
-							state = nil}
-
+			local dat = {dist = nil,state = nil}
 			local t_pos = string.find( name, "|", 1, true )
-
 			local dist = string.sub( name, 1, t_pos - 1 )
 			local state	= string.sub( name, t_pos + 1)
-
-
 			dat.dist = tonumber(dist)
 			if state then
 				dat.state = xr_logic.parse_condlist(npc, dist, state, state)
 			end
-			table.insert(t, dat)
+			size_t = size_t + 1
+			t[size_t] = dat
 		end
 	end
-		return t
+	return t
 end

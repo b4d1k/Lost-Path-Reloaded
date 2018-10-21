@@ -23,6 +23,12 @@ local function npc_on_death_callback(npc,who)
 				local tsk = tm.task_info[task_id]
 				if (tsk and tsk.stage == 0) then 
 					tsk.stage = 1
+					
+					-- refund goodwill
+					local comm = npc:character_community()
+					if not (game_relations.is_factions_enemies(comm, db.actor:character_community():sub(7))) then
+						game_relations.change_factions_community_num(comm,0,1000)
+					end
 				end
 			else 
 				local tm = task_manager.get_task_manager()
@@ -100,11 +106,8 @@ end
 -- m_trader (ie. Sidorovich) use npc:name() instead
 function generate_available_tasks(npc,is_sim)
 	local id = npc:id()
-	if not (available_tasks[id]) then 
-		available_tasks[id] = {}
-	else
-		empty_table(available_tasks[id])
-	end
+	available_tasks[id] = iempty_table(available_tasks[id])
+	local size_t = 0
 	
     local tm = task_manager.get_task_manager()
     local task_info = tm.task_info
@@ -146,14 +149,16 @@ function generate_available_tasks(npc,is_sim)
 					end
 					
 					if (st.dyn_quest_rand == task_id) then
-						table.insert(available_tasks[id],task_id)
+						size_t = size_t + 1
+						available_tasks[id][size_t] = task_id
 						return
 					elseif (st.dyn_quest_rand == nil) then
-						table.insert(t,task_id)
+						t[#t+1] = task_id
 					end
 				end
 			else
-				table.insert(available_tasks[id],task_id)
+				size_t = size_t + 1
+				available_tasks[id][size_t] = task_id
 			end
         end
         count = count + 1
@@ -163,17 +168,15 @@ function generate_available_tasks(npc,is_sim)
 	-- randomize available tasks from sim npcs and only offer 1 job; remembing this job until NPC go offline
 	if (t and #t > 0) then
 		st.dyn_quest_rand = t[math.random(#t)]
-		table.insert(available_tasks[id],st.dyn_quest_rand)
+		size_t = size_t + 1
+		available_tasks[id][size_t] = st.dyn_quest_rand
 	end
 end
 
 function generate_ongoing_tasks(npc,is_sim)
 	local id = npc:id()
-	if not (ongoing_tasks[id]) then 
-		ongoing_tasks[id] = {}
-	else
-		empty_table(ongoing_tasks[id])
-	end
+	ongoing_tasks[id] = iempty_table(ongoing_tasks[id])
+	local size_t = 0
 	
     local tm = task_manager.get_task_manager()
     local task_info = tm.task_info
@@ -202,11 +205,13 @@ function generate_ongoing_tasks(npc,is_sim)
 					if (is_sim) then
 						if (task_info[task_id].task_giver_id) then
 							if (npc:id() == task_info[task_id].task_giver_id) then
-								table.insert(ongoing_tasks[id],task_id)
+								size_t = size_t + 1
+								ongoing_tasks[id][size_t] = task_id
 							end
 						end
 					else
-						table.insert(ongoing_tasks[id],task_id)
+						size_t = size_t + 1
+						ongoing_tasks[id][size_t] = task_id
 					end
 				end
 			end
@@ -218,11 +223,8 @@ end
 
 function generate_finished_tasks(npc,is_sim)
 	local id = npc:id()
-	if not (finished_tasks[id]) then 
-		finished_tasks[id] = {}
-	else
-		empty_table(finished_tasks[id])
-	end
+	finished_tasks[id] = iempty_table(finished_tasks[id])
+	local size_t = 0
 	
 	local tm = task_manager.get_task_manager()
 	local task_info = tm.task_info
@@ -250,11 +252,13 @@ function generate_finished_tasks(npc,is_sim)
 				if (is_sim) then 
 					if (task_info[task_id].task_giver_id) then 
 						if (npc:id() == task_info[task_id].task_giver_id) then 
-							table.insert(finished_tasks[id],task_id)
+							size_t = size_t + 1
+							finished_tasks[id][size_t] = task_id
 						end 
 					end
-				else 
-					table.insert(finished_tasks[id],task_id)
+				else
+					size_t = size_t + 1
+					finished_tasks[id][size_t] = task_id
 				end
 			end
 		end
@@ -265,11 +269,11 @@ end
 
 function trigger_fetch_func(task_id)
 	--printf("triiger_fetch_func %s",task_id)
-	local fetch_func = xr_logic.parse_condlist(db.actor, "task_manager", "condlist", task_manager.task_ini:r_string_ex(task_id,"fetch_func") or "")
+	local fetch_func = task_manager.task_ini:r_string_to_condlist(task_id,"fetch_func")
 	if (fetch_func) then 
 		xr_logic.pick_section_from_condlist(db.actor,db.actor,fetch_func)
 	end
-end 
+end
 
 function is_task_on_complete_stage(tsk)
 	local tm = task_manager.get_task_manager()

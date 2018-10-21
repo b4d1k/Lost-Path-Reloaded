@@ -23,7 +23,7 @@ function heli_fly:__init(obj)
     self.max_velocity   = 0
     self.point_arr      = {}
     self.dest_point     = nil 
-    self.point_by_look  = vector():set(0,0,0)
+    self.point_by_look  = VEC_Z
 end
 
 

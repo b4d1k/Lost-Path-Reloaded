@@ -70,8 +70,8 @@ function signal_light_binder:update(delta)
 
 end
 
-function signal_light_binder:net_spawn(data)
-	if not object_binder.net_spawn(self, data) then
+function signal_light_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 	return true

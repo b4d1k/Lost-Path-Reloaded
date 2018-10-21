@@ -53,6 +53,16 @@ function evaluator_npc_vs_box:evaluate()
 	return ret
 end
 
+function get_weapon(npc,st)
+	if not (st.spawned_knife) then
+		local wpn = npc:object("wpn_knife")
+		if not (wpn) then
+			alife():create("wpn_knife",vector():set(0,0,0),0,0,npc:id())
+			st.spawned_knife = true
+		end
+	end
+	return wpn or npc:best_weapon()
+end
 -----------------------------------------------------------------------------------------
 --								ACTION NPC vs BOX
 -----------------------------------------------------------------------------------------
@@ -65,7 +75,7 @@ function action_npc_vs_box:initialize()
 	local npc = self.object
 	npc:set_desired_position()
 	npc:set_desired_direction()
-	local bw = self.object:best_weapon()
+	local bw = get_weapon(npc,self.st)
 	if (bw) then
 		self.object:set_item(object.aim1,bw)
 	end
@@ -73,6 +83,7 @@ end
 
 function action_npc_vs_box:execute()
 	action_base.execute(self)
+	
 	local obj
 	local itr = function(id)
 		if not (obj) then
@@ -90,15 +101,28 @@ function action_npc_vs_box:execute()
 	
 	self.st.__tmr = self.st.__tmr or time_global()+8000
 	if (time_global() > self.st.__tmr) then 
-		local se_obj = alife_object(obj:id())
-		if (se_obj) then 
-			alife():release(se_obj,true)
-		end
+		local pos = self.object:position()
+		local h = hit()
+		h.power = 5
+		h.direction = obj:position():sub(vector():set(pos.x,pos.y+0.3,pos.z))
+		h.bone = "link"
+		h.draftsman = self.object
+		h.impulse = 6000
+		h.type = hit.wound
+		obj:hit(h)
 		self.st.__tmr = nil
+		return
 	end
 	
+	if (self.object:position():distance_to_sqr(obj:position()) > 1.5) then 
+		utils.send_to_nearest_accessible_vertex(self.object,obj:level_vertex_id())
+		return
+	end
+	
+	self.object:set_dest_level_vertex_id(self.object:level_vertex_id())
+	
 	local pos = vector():set(obj:position())
-	pos.y = pos.y + 0.4
+	pos.y = pos.y + 0.15
 	
 	local st = db.storage[self.object:id()].state_mgr
 	self.object:clear_animations()
@@ -112,7 +136,7 @@ function action_npc_vs_box:execute()
 	self.object:set_body_state(move.crouch)
 	self.object:set_movement_type(move.stand)
 	self.object:set_sight(look.fire_point,pos)
-	local bw = self.object:best_weapon()
+	local bw = get_weapon(self.object,self.st)
 	if (bw) then
 		if (self.object:is_body_turning()) then
 			self.object:set_item(object.aim1,bw)
@@ -132,6 +156,17 @@ function action_npc_vs_box:finalize()
 	self.object:set_sight(look.direction, self.object:direction() , 0)
 	self.object:set_desired_position()
 	self.object:set_desired_direction()
+	
+	if (self.st.spawned_knife) then
+		local wpn = self.object:object("wpn_knife")
+		if (wpn) then
+			local se_obj = alife_object(wpn:id())
+			if (se_obj) then
+				alife():release(se_obj,true)
+			end
+		end
+		self.st.spawned_knife = nil
+	end
 end
 
 ---------------------------------------------------------
@@ -154,7 +189,6 @@ function add_to_binder(npc,ini,scheme,section,storage,temp)
 	
 	temp.action:add_precondition(world_property(stalker_ids.property_alive,true))
 	temp.action:add_precondition(world_property(stalker_ids.property_danger, false))
-	temp.action:add_precondition(world_property(stalker_ids.property_anomaly,false))
 	temp.action:add_precondition(world_property(evaid,true))
 	
 	temp.action:add_effect(world_property(evaid,false))

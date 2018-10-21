@@ -11,7 +11,7 @@ function se_car:on_register()
 	--end
 end
 function se_car:on_unregister()
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 	cse_alife_car.on_unregister(self)
 end 
 function se_car:can_switch_offline ()

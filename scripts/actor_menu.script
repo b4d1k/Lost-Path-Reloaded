@@ -15,6 +15,7 @@ xr_meet_upgrade_closed = false
 dead_body_searching = false
 
 function actor_menu_mode(mode)
+	SendScriptCallback("actor_menu_mode_changed",mode,last_mode)
 	if(mode==0) then
 		if(last_mode==1) then
 			inventory_wnd_closed()

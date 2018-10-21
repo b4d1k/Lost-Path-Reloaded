@@ -1,13 +1,13 @@
 ------ CoC Jup A6 Ashot and Yar 
 function dm_ashot_and_yar_generate_dialog(a,b)
 	local npc = dialogs.who_is_npc(a,b)
-	local sid = story_objects.get_story_objects_registry():get_story_id(npc:id())
+	local sid = get_object_story_id(npc:id())
 	local text = {}
 	local target_name = ""
 	
 	if (sid == "jup_b19_freedom_yar") then 
 		for i=1,5 do 
-			table.insert(text,"st_jup_yar_reply_"..i)
+			text[#text+1] = "st_jup_yar_reply_"..i
 		end
 		target_name = game.translate_string("jup_a6_freedom_trader_ashot_name")
 		
@@ -17,7 +17,7 @@ function dm_ashot_and_yar_generate_dialog(a,b)
 		end
 	elseif (sid == "jup_a6_freedom_trader_ashot") then 
 		for i=1,5 do 
-			table.insert(text,"st_jup_ashot_reply_"..i)
+			text[#text+1] = "st_jup_ashot_reply_"..i
 		end
 		target_name = game.translate_string("jup_b19_freedom_yar_name")
 		
@@ -39,8 +39,7 @@ function is_message_receiver(a,b)
 		return false 
 	end 
 	
-	local sid = story_objects.get_story_objects_registry():get_story_id(npc:id())
-		
+	local sid = get_object_story_id(npc:id())
 	return sid == "jup_a6_freedom_trader_ashot" and tsk.stage == 0 or sid == "jup_b19_freedom_yar" and tsk.stage == 1 or false
 end
 
@@ -65,9 +64,9 @@ function ecolog_companion_task_2_give_reward(a,b)
 	if ((math.random(1,100)/100) <= 0.5) then
 		coc_treasure_manager.create_random_stash()
 	end
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"ecolog", 50})
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"csky", 25})
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"killer", 25})
+	game_relations.change_factions_community_num("ecolog",0,50)
+	game_relations.change_factions_community_num("csky",0,25)
+	game_relations.change_factions_community_num("killer",0,25)
 end
 
 -- b208

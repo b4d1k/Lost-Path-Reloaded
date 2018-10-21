@@ -58,6 +58,8 @@ function move_mgr:__init(npc)
 		printf("move_mgr:__init() - npc is nil, please update the script")
 	end
 	self.object = npc
+	self.target = {}
+	self.cbs = {}
 end
 
 function move_mgr:initialize(npc)
@@ -78,8 +80,7 @@ function move_mgr:validate_paths()
 	local patrol_walk_count = self.patrol_walk:count()
 	if patrol_walk_count == 1 then
 		if self.path_walk_info[0].flags:get() == 0 then
-			printf("object '%s': path_walk '%s' has 1 waypoint, but has no flags",
-				self.object:name(), self.path_walk)
+			printf("object '%s': path_walk '%s' has 1 waypoint, but has no flags",self.object:name(), self.path_walk)
 		end
 	end
 end
@@ -234,7 +235,12 @@ function move_mgr:reset(path_walk, path_walk_info, path_look, path_look_info, te
 
 		self.at_terminal_waypoint_flag = false
 
-		self.cur_state_standing = xr_logic.pick_section_from_condlist(db.actor, self.object, self.default_state_standing)
+		if (self.object:character_community() == "zombied" and not get_object_story_id(self.object:id())) then -- in the case zombied has some kind of scripted action
+			self.cur_state_standing = self.default_state_standing
+		else
+			self.cur_state_standing = xr_logic.pick_section_from_condlist(db.actor, self.object, self.default_state_standing)
+		end 
+		
 		self.cur_state_moving = xr_logic.pick_section_from_condlist(db.actor, self.object, self.default_state_moving1)
 
 		self.retval_after_rotation = nil
@@ -368,9 +374,18 @@ function move_mgr:update()
 end
 
 function move_mgr:set_current_state_moving(state)
-	self.cur_state_moving = state
-	self:update_movement_state()
+	self.ovr_state_moving = state
+	if (state) then
+		self:update_movement_state()
+	end
 end
+
+function move_mgr:set_current_state_standing(state)
+	self.ovr_state_standing = state
+	if (state) then
+		self:update_standing_state()
+	end
+end 
 
 function move_mgr:finalize(npc)
 	if self.team then
@@ -389,35 +404,52 @@ function move_mgr:update_movement_state()
 		return
 	end
 
-	--[[
 	--printf("%s UPDATE movement state to %s", self.object:name(), self.cur_state_moving)
-	if (not self.__climb_enabled and self.current_point_index and self.current_point_index > 0) then
+	--[[
+	if (self.current_point_index and self.current_point_index > 0) then
 		local a = self.patrol_walk:point(self.current_point_index)
-		local b = self.patrol_walk:point(self.current_point_index-1)
+		local b = a and self.patrol_walk:point(self.current_point_index-1)
 		if (a and b) then
-			local angle = alun_utils.angle_diff(b,a)
+			local angle = utils.angle_diff(b,a)
 			--printf("angle=%s",angle)
-			if (angle >= 90) then
+			if (angle >= 85) then
 				state_mgr.set_state(self.object,"climb")
-				self.__climb_enabled = true
 				return
 			end
 		end
 	end
-	self.__climb_enabled = nil
 	--]]
 
-	state_mgr.set_state(self.object, self.cur_state_moving,nil, nil, nil, { fast_set = true})
+	state_mgr.set_state(self.object, self.ovr_state_moving or self.cur_state_moving,nil, nil, self.target)
 end
+
+function move_mgr:set_target(pos,obj,dir)
+	self.target.look_position = pos 
+	self.target.look_object = obj 
+	self.target.look_dir = dir
+end
+function move_mgr:clear_target()
+	self.target.look_position = nil 
+	self.target.look_object = nil 
+	self.target.look_dir = nil
+end 
 
 function move_mgr:update_standing_state(look_pos, snd)
 	--printf("_bp [%s]: update_standing_state: snd='%s', pt_wait_time = %s path = %s", self.object:name(), utils.to_str(snd), utils.to_str(self.pt_wait_time),  self.path_walk)
-	state_mgr.set_state(self.object, self.cur_state_standing,
-		{ obj = self, func = self.time_callback, turn_end_func = self.turn_end_callback },
-		self.pt_wait_time,
-		{ look_position = look_pos },
-		nil,
-		snd )
+	
+	-- absurd, but it's just to avoid continous table creation
+	local old_pos = self.target.look_position
+	self.target.look_position = look_pos 
+	self.cbs.obj = self
+	self.cbs.func = self.time_callback
+	self.cbs.turn_end_func = self.turn_end_callback
+	
+	state_mgr.set_state(self.object, self.ovr_state_standing or self.cur_state_standing,self.cbs,self.pt_wait_time,self.target,nil,snd)
+		
+	self.target.look_position = old_pos
+	self.cbs.obj = nil
+	self.cbs.func = nil
+	self.cbs.turn_end_func = nil
 end
 
 function move_mgr:time_callback()

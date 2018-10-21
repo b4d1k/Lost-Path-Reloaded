@@ -38,11 +38,7 @@ end
 function se_stalker:STATE_Write(packet)
 	--alun_utils.debug_write(strformat("%s STATE_Write alive=%s",self:name(),self:alive()))
 	cse_alife_human_stalker.STATE_Write (self, packet)
-	if self.online then
-		packet:w_stringZ(tostring(level and level.object_by_id(self.id) and level.object_by_id(self.id):level_vertex_id()))
-	else
-		packet:w_stringZ(tostring(db.offline_objects[self.id] and db.offline_objects[self.id].level_vertex_id))
-	end
+	packet:w_stringZ(tostring(db.offline_objects[self.id] and db.offline_objects[self.id].level_vertex_id))
 	packet:w_stringZ(tostring(db.offline_objects[self.id] and db.offline_objects[self.id].active_section))
 	packet:w_bool(false) -- self.death_droped
 end
@@ -51,17 +47,10 @@ function se_stalker:STATE_Read(packet, size)
 	--alun_utils.debug_write("\nse_stalker:STATE_Read "..self:name().." START")
 	cse_alife_human_stalker.STATE_Read (self, packet, size)
 	if self.script_version > 10 then
-		local old_lvid = packet:r_stringZ()
-		if db.offline_objects[self.id] == nil then
-			db.offline_objects[self.id] = {}
-		end
-		db.offline_objects[self.id].active_section = packet:r_stringZ()
-		if db.offline_objects[self.id].active_section == "nil" then
-			db.offline_objects[self.id].active_section = nil
-		end
-		if old_lvid ~= "nil" then
-			db.offline_objects[self.id].level_vertex_id = tonumber(old_lvid)
-		end
+		db.offline_objects[self.id] = db.offline_objects[self.id] or {}
+		db.offline_objects[self.id].level_vertex_id = tonumber(packet:r_stringZ())
+		local v = packet:r_stringZ()
+		db.offline_objects[self.id].active_section = v ~= "nil" and v ~= "" and v or nil
 	end
 	packet:r_bool() -- self.death_droped = packet:r_bool()
 	--alun_utils.debug_write("se_stalker:STATE_Read "..self:name().." END\n")
@@ -121,7 +110,7 @@ function se_stalker:on_unregister()
 	if (m_data.game_object) then 
 		m_data.game_object[self.id] = nil
 	end
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 	cse_alife_human_stalker.on_unregister(self)
 end
 --------------------
@@ -167,7 +156,7 @@ function se_trader:on_register()
 end
 
 function se_trader:on_unregister()
-	unregister_story_object_by_id(self.id)
+	story_objects.unregister(self.id)
 	cse_alife_trader.on_unregister(self)
 	local m_data = alife_storage_manager.get_state()
 	if (m_data.se_object) then 

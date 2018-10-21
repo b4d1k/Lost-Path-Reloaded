@@ -6,7 +6,7 @@
 function opt_menu_on_init(menu)
 	-- simply add new line and a ui_mm_<name> in ui_st_mm.xml to create a new option. Script automatically does the rest for you
 	-- debug_hud
-	menu.gameplay_options["debug_hud"]			= {default=false, 	debug_only=true, 	typ="check", on_accept=function(handler,optMgr,ctrl)
+	menu.gameplay_ui_options["debug_hud"]			= {default=false, 	debug_only=true, 	typ="check", on_accept=function(handler,optMgr,ctrl)
 		if (level.present() and xrs_debug_tools) then
 			if (ctrl:GetCheck()) then
 				xrs_debug_tools.activate_feature()
@@ -15,22 +15,42 @@ function opt_menu_on_init(menu)
 			end
 		end
 	end}
+	
 	-- localization
-	menu.gameplay_options["localization"] = {default="eng", debug_only=false, typ="list", list={"eng","rus"}, on_accept=function(handler,optMgr,ctrl)
+	local localization_list = {}
+	local flist = getFS():file_list_open("$game_text$",bit_or(FS.FS_ListFolders,FS.FS_RootOnly))
+	local f_cnt = flist:Size()
+	for	it=0, f_cnt-1 do
+		localization_list[#localization_list+1] = flist:GetAt(it):sub(1,-2)
+	end
+	menu.gameplay_options["localization"] = {default="eng", debug_only=false, typ="list", list=localization_list, on_accept=function(handler,optMgr,ctrl)
 		local language = ctrl:GetText()
 		if (language and language ~= "") then
 			local loc_ini = ini_file_ex("localization.ltx",true)
 			if (loc_ini:r_value("string_table","language") ~= language) then
 				loc_ini:w_value("string_table","language",language)
 				loc_ini:save()
-				menu.b__require_restart = true
+				--menu.b__require_restart = true
+				reload_system_ini()
+				game.reload_language()
 			end
 		end
 	end}
-	
+	-- debug_hud_map
+	menu.gameplay_ui_options["debug_map_hud"]			= {default=false, 	debug_only=true, 	typ="check",
+		on_accept=function(handler,optMgr,ctrl)
+			if (level.present() and ui_map_debug_ex) then
+				if (ctrl:GetCheck()) then
+					ui_map_debug_ex.activate_feature()
+				else 
+					ui_map_debug_ex.deactivate_feature()
+				end
+			end
+		end
+	}	
 	-- slot Hud
 	if (slot_hud) then
-		menu.gameplay_options["slot_hud"]		= {default=false, 	debug_only=false, 	typ="check", on_accept=function(handler,optMgr,ctrl)
+		menu.gameplay_ui_options["slot_hud"]		= {default=false, 	debug_only=false, 	typ="check", on_accept=function(handler,optMgr,ctrl)
 			if (level.present() and slot_hud) then
 				if (ctrl:GetCheck()) then
 					slot_hud.activate_hud()
@@ -58,7 +78,7 @@ function opt_menu_on_init(menu)
 	-- release dropped items 
 	menu.gameplay_options["release_dropped_items"]	= {default=true, 	debug_only=false, 	typ="check"}
 	-- show_enemy_health
-	menu.gameplay_options["show_enemy_health"]	= {default=false, 	debug_only=true, 	typ="check"}
+	menu.gameplay_ui_options["show_enemy_health"]	= {default=false, 	debug_only=true, 	typ="check"}
 	-- radio_mod
 	menu.gameplay_options["radio_mod"]			= {default=true, 	debug_only=false, 	typ="check"}
 	-- mechanic_feature
@@ -68,7 +88,7 @@ function opt_menu_on_init(menu)
 	-- heli_spawn
 	menu.gameplay_options["heli_spawn"]			= {default=true, 	debug_only=false, 	typ="check"}
 	-- dynamic_news
-	menu.gameplay_options["dynamic_news"]		= {default=true, 	debug_only=false, 	typ="check", on_accept=function(handler,optMgr,ctrl)
+	menu.gameplay_ui_options["dynamic_news"]		= {default=true, 	debug_only=false, 	typ="check", on_accept=function(handler,optMgr,ctrl)
 		if (level.present() and dynamic_news_manager) then 
 			if (ctrl:GetCheck()) then 
 				dynamic_news_manager.get_dynamic_news()
@@ -106,16 +126,14 @@ function opt_menu_on_init(menu)
 	-- note: shouldn't be greater than switch distance or no simulation squads will come online. Instead it should create a border zone between excl_dist and switch_distance where stuff can come online
 	-- so that when actor walks stuff will naturally come online but if squad teleports very close to actor it will stay offline until player walks far enough away.
 	menu.gameplay_options["excl_dist"]			= {default=25, 		debug_only=false, 	typ="list", list={0,25,50,100}}  
-	
-	-- quicksave_cnt
+	-- number of rotating quicksaves
 	menu.gameplay_options["quicksave_cnt"]		= {default=5, 		debug_only=false, 	typ="list", list={1,5,10,20}}
-	
+	-- character portraits
 	if (db.actor) then -- Options will only show while in-game
-	
 		local l = get_character_icon_list()
 		local selected = nil 
 		
-		menu.gameplay_options["char_portrait"]	= {default=db.actor_binder.character_icon or "ui_inGame2_Strelok", debug_only=false, typ="list", list=l, 
+		menu.gameplay_ui_options["char_portrait"]	= {default=db.actor_binder.character_icon or "ui_inGame2_Strelok", debug_only=false, typ="list", list=l, 
 			on_accept=function(handler,optMgr,ctrl)
 				if (selected) then
 					db.actor_binder.character_icon = ctrl:GetText()
@@ -137,7 +155,7 @@ function opt_menu_on_init(menu)
 			end
 		}
 		
-		menu.gameplay_options["outfit_portrait"]	= {default=false, 	debug_only=false, 	typ="check", 
+		menu.gameplay_ui_options["outfit_portrait"]	= {default=false, 	debug_only=false, 	typ="check", 
 			on_accept=function(handler,optMgr,ctrl)
 				if (ctrl:GetCheck()) then
 					local outfit = db.actor:item_in_slot(7)
@@ -152,13 +170,25 @@ function opt_menu_on_init(menu)
 				end
 			end
 		}
-		
 	end
 	
-    -- axr option default config
-    local need_save
+	write_default_config(menu.gameplay_options)
+	write_default_config(menu.gameplay_ui_options)
+end
 
-    for k,v in pairs(menu.gameplay_options) do
+function opt_menu_on_accept(menu,optMgr,console)
+	on_accept(menu.gameplay_options,menu,optMgr,console)
+	on_accept(menu.gameplay_ui_options,menu,optMgr,console)
+end
+
+function opt_menu_on_set_values(menu,optMgr)
+	on_set_values(menu.gameplay_options,menu,optMgr)
+	on_set_values(menu.gameplay_ui_options,menu,optMgr)
+end
+
+function write_default_config(tab_table)
+	local need_save = false
+    for k,v in pairs(tab_table) do
 		if (v.default ~= nil) then
 			if (v.typ=="check") then
 				if not (axr_main.config:line_exist("mm_options","enable_"..k)) then
@@ -171,14 +201,13 @@ function opt_menu_on_init(menu)
 			end
 		end
     end
- 
-    if (need_save) then
-        axr_main.config:save()
-    end
+	if (need_save) then 
+		axr_main.config:save()
+	end
 end
 
-function opt_menu_on_accept(menu,optMgr,console)
-    for name,v in pairs(menu.gameplay_options) do
+function on_accept(tab_table,menu,optMgr,console)
+    for name,v in pairs(tab_table) do
 		if (v.default ~= nil) then
 			if (v.typ=="check") then
 				axr_main.config:w_value("mm_options","enable_"..name,v.ctrl:GetCheck())
@@ -200,8 +229,8 @@ function opt_menu_on_accept(menu,optMgr,console)
     axr_main.config:save()
 end
 
-function opt_menu_on_set_values(menu,optMgr)
-    for name,v in pairs(menu.gameplay_options) do
+function on_set_values(tab_table,menu,optMgr)
+    for name,v in pairs(tab_table) do
 		if (v.default ~= nil) then
 			if (v.typ=="check") then
 				v.ctrl:SetCheck(axr_main.config:r_value("mm_options","enable_"..name,1,v.default))
@@ -225,13 +254,13 @@ end
 function get_character_icon_list()
 	local t = {"ui_inGame2_Strelok"}
 	local faction = character_community(db.actor):sub(7)
-	local ini = ini_file("plugins\\faction_portraits.ltx")
+	local ini = ini_file("plugins\\player_portraits.ltx")
 	local section = faction.."_portraits"
 	local n = ini:section_exist(section) and ini:line_count(section) or 0
+	local result, id, value = nil,nil,nil
 	for i=0, n-1 do
-		local result, id, value = ini:r_line(section,i,"","" )
-		table.insert(t,id)
+		result, id, value = ini:r_line(section,i,"","" )
+		t[#t+1] = id
 	end
-
 	return t
 end

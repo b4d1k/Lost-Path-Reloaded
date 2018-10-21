@@ -2,20 +2,15 @@
 Dynamic Gulag
 Rewritten by Alundaio (original: ??? GSC)
 
-
-
-
-This script was re-written to overcome some serious performance issues caused by creating new ltx files
-on every load when most of the time this information goes unchanged. Remember, if you use this and you make
-a change to the gulag by adding new waypoints through all.spawn or LE then you need to delete the contents of configs\gulag
+This script was re-written to overcome some serious performance issues in vanilla game. If you are wondering why
+CoC loads faster, this is one the reason. String concatenation is very costly in lua, so script was rewritten to 
+avoid it.
 
 Another reason this was re-written is because it alters the job tables used by smart_terrain.script. GSC made
 the job system very inefficient by putting tables inside of tables which required deep recursion to find a job
 when you can simply put them all in one table and sort by priority. Indexing the jobs like I do here also
 allows to step through the table once per update for NPCs who already have a job and are just scanning for a higher
 priority job to switch to; This improves performance substantially.
-
-TODO: Further optimize by replacing string concat with table.concat, though it's not important now that most of it is only generated once
 ----------
 Notes:
 ----------
@@ -23,19 +18,19 @@ Notes:
 -----------------------------------------------------
    Job                  |   Prior
 -----------------------------------------------------
-surge                     			60
+animpoint                  			15
+beh                        			30
 beh_surge                  			60
 camper                     			45
-sniper                     			30
-beh                        			30
+campfire_point						10
 collector                  			25
+cover 								3
 guard                     			25
 patrol                     			25 (-1 per follower)
 sleep                     			20
+sniper                     			30
+surge                     			60
 walker                     			15
-animpoint                  			15
-campfire_point						10
-cover 								3
 
 So if you want an exclusive job to ignore the priority of all other jobs set prior at 61+
 If you want an exclusive job to take priority over all other jobs except surge jobs, set prior at 50.
@@ -43,11 +38,32 @@ Exclusive jobs should be used for jobs you want everyone else locked out of, suc
 They are also useful for filling up jobs with a specific character or squad type. Like a faction smart.
 
 
-2. Never use the same logic section names (ie. 'logic@walker_1') between exclusive jobs and auto-generated jobs for each smart.
+2. Never use the same logic section names (ex. 'logic@walker_1') between exclusive jobs and auto-generated jobs for each smart.
 There is a table that a smart_terrain uses called 'npc_by_job_section' which would require that every logic section is uniquely named.
 To avoid this simply give exclusive jobs a prefix, like 'logic@exclusive_walker_1_walk_1'
 
-3. Squad smart population is based on sim squad count. Do not count jobs for squads with target_smart as a field in squad descriptions
+3. Squad smart max population should be based on sim squad count multiplied by 3. Do not count jobs for squads with target_smart as a field in squad descriptions.
+--]]
+
+-- Naming Conventions for dynamic gulag jobs
+--[[
+	animpoint		- <smart>_animpoint_<index>   		(ex. yan_smart_terrain_4_6_animpoint_1)
+	animpoint_surge - <smart>_surge_animpoint_<index>	(ex. yan_smart_terrain_4_6_surge_animpoint_1)
+	beh 			- <smart>_beh_<index>				(ex. esc_smart_terrain_1_5_beh_1)
+	beh_surge 		- <smart>_beh_surge_<index>			(ex. esc_smart_terrain_1_5_beh_surge_1)
+	beh_trader 		- <smart>_beh_trade_<index>			(ex. esc_smart_terrain_1_5_beh_trade_1)
+	camper 			- <smart>_camper_<index>_walk		(ex. yan_smart_terrain_4_6_camper_1_walk)			look path: yan_smart_terrain_4_6_camper_1_look
+	campfire_point 	- <smart>_campfire_point_<index>	(ex. yan_smart_terrain_4_6_campfire_point_1)
+	cover 			- <smart>_point_<index>				(ex. yan_smart_terrain_4_6_point_1)
+	collector 		- <smart>_collector_<index>_walk 	(ex. yan_smart_terrain_4_6_collector_1_walk) 		look path: yan_smart_terrain_4_6_collector_1_look
+	guard			- <smart>_guard_<index>_walk 		(ex. yan_smart_terrain_4_6_guard_1_walk) 			look path: yan_smart_terrain_4_6_guard_1_look
+	mob_home		- <smart>_home_<index>				(ex. yan_smart_terrain_4_6_home_1)
+	patrol 			- <smart>_patrol_<index>_walk		(ex. yan_smart_terrain_4_6_patrol_1_walk) 			look path: yan_smart_terrain_4_6_patrol_1_look
+	point 			- <smart>_point_<index> 	 		(ex. yan_smart_terrain_4_6_point_1)
+	sleeper			- <smart>_sleep_<index> 			(ex. yan_smart_terrain_4_6_sleep_1)
+	sniper			- <smart>_sniper_<index>_walk		(ex. yan_smart_terrain_4_6_sniper_1_walk) 			look path: yan_smart_terrain_4_6_sniper_1_look	 
+	surge 			- <smart>_surge_<index>_walk		(ex. yan_smart_terrain_4_6_surge_1_walk) 			look path: yan_smart_terrain_4_6_surge_1_look		
+	walker 			- <smart>_walker_<index>_walk		(ex. yan_smart_terrain_4_6_walker_1_walk) 			look path: yan_smart_terrain_4_6_walker_1_look
 --]]
 
 -- HOW TO ADD HELI JOBS:
@@ -73,25 +89,24 @@ If there is a heli hide waypoint helicopter will spawn here instead of over smar
 -------------------------------------------------
 --]]
 
-local ltx
+local ltx_size = 0
 local beh_ini
 local ids = 0
 local job_type_by_scheme = {
-	["walker"]      	= "path_job",
-	["camper"]      	= "path_job",
-	["patrol"]      	= "path_job",
 	["animpoint"]   	= "smartcover_job",
-	["smartcover"]  	= "smartcover_job",
-	["remark"]      	= "point_job",
+	["beh"]         	= "point_job",
+	["camper"]      	= "path_job",
+	["companion"]   	= "point_job",
 	["cover"]       	= "point_job",
-	["sleeper"]     	= "path_job",
-	["mob_walker"]  	= "path_job",
+	["heli_move"]		= "heli_path_job",
 	["mob_home"]    	= "path_job",
 	["mob_jump"]    	= "point_job",
-	["companion"]   	= "point_job",
-	["beh"]         	= "point_job",
-	["campfire_point"] 	= "point_job",
-	["heli_move"]		= "heli_path_job"
+	["mob_walker"]  	= "path_job",
+	["patrol"]      	= "path_job",
+	["remark"]      	= "point_job",
+	["sleeper"]     	= "path_job",
+	["smartcover"]  	= "smartcover_job",
+	["walker"]      	= "path_job"
 }
 
 function get_job_prior(job)
@@ -122,22 +137,12 @@ function get_job_prefix_name(job)
 	return job_info_by_job_type_id[job.job_type_id].prefix_name
 end
 
--- util to check if a file_exists for lua io.open
--- xrEngine's FS requires path to be in fs_game.ltx, it's why I don't use it here
-local function file_exists(name)
-   local f=io.open(name,"r")
-   if f~=nil then f:close() return true else return false end
-end
-
 --------------------------------------------------------------------
 -- Job Preconditions
 --------------------------------------------------------------------
 local function precond_exclusive(se_obj,smart,job)
 	local result = xr_logic.pick_section_from_condlist(db.actor, se_obj, job.precondition_params.condlist)
-	if (result == "false" or result == nil) then
-		return false
-	end
-	return true
+	return result == "true" or result == ""
 end
 
 local function precond_heli_hide(se_obj,smart,job)
@@ -149,7 +154,7 @@ local function precond_heli(se_obj,smart,job)
 end
 
 local function precond_surge(se_obj, smart, job)
-	if se_obj:community() == "zombied" then
+	if se_obj:community() == "zombied" or se_obj:community() == "monolith" then
 		return false
 	end
 	return xr_conditions.surge_started()
@@ -164,45 +169,11 @@ local function precond_safe_job_sleeper(se_obj, smart, job)
 		return false
 	end
 
-	if smart.smart_alarm_time == nil then
-		return true
-	end
-
-	if smart.safe_restr == nil then
-		return true
-	end
-	
-	if not (job.precondition_params) then 
-		return true 
-	end
-
-	-- should probably remove, irrelevant in 1.6
-	if job.precondition_params.is_safe_job == nil then
-		job.precondition_params.is_safe_job = xr_gulag.job_in_restrictor(smart, smart.safe_restr, string.gsub(job.section,"logic@","",1))
-	end
-
-	return job.precondition_params.is_safe_job ~= false
+	return true--smart.smart_alarm_time == nil
 end
 
 local function precond_safe_job(se_obj, smart, job)
-	if smart.smart_alarm_time == nil then
-		return true
-	end
-
-	if smart.safe_restr == nil then
-		return true
-	end
-	
-	if not (job.precondition_params) then 
-		return true 
-	end
-
-	-- should probably remove, irrelevant in 1.6
-	if job.precondition_params.is_safe_job == nil then
-		job.precondition_params.is_safe_job = xr_gulag.job_in_restrictor(smart, smart.safe_restr, string.gsub(job.section,"logic@","",1))
-	end
-
-	return job.precondition_params.is_safe_job ~= false
+	return true--smart.smart_alarm_time == nil
 end
 
 local function precond_safe_job_patrol(se_obj, smart, job)
@@ -214,31 +185,14 @@ local function precond_safe_job_patrol(se_obj, smart, job)
 		return false
 	end
 
-	if smart.smart_alarm_time == nil then
-		return true
-	end
-
-	if smart.safe_restr == nil then
-		return true
-	end
-
-	if not (job.precondition_params) then 
-		return true 
-	end
-
-	-- should probably remove, irrelevant in 1.6
-	if job.precondition_params.is_safe_job == nil then
-		job.precondition_params.is_safe_job = xr_gulag.job_in_restrictor(smart, smart.safe_restr, string.gsub(job.section,"logic@","",1))
-	end
-
-	return job.precondition_params.is_safe_job ~= false
+	return true--smart.smart_alarm_time == nil
 end
 
 local function precond_collector(se_obj, smart, job)
 	local st = db.storage[se_obj.id]
-	local npc = st and st.object or level.object_by_id(se_obj.id)
+	local npc = st and st.object
 
-	if npc == nil then
+	if not (npc) then
 		return false
 	end
 
@@ -246,14 +200,10 @@ local function precond_collector(se_obj, smart, job)
 		return false
 	end
 
-	local detectors = { "detector_simple", "detector_advanced", "detector_elite", "detector_scientific" }
+	if (npc:object("detector_simple") or npc:object("detector_advanced") or npc:object("detector_elite") or npc:object("detector_scientific")) then 
+		return true 
+	end 
 
-	for k,v in pairs(detectors) do
-		local obj = npc:object(v)
-		if obj ~= nil then
-			return true
-		end
-	end
 	return false
 end
 
@@ -267,24 +217,7 @@ local function precond_animpoint(se_obj, smart, job)
 end
 
 local function precond_safe_job_guard(se_obj, smart, job)
-	if smart.smart_alarm_time == nil then
-		return true
-	end
-
-	if smart.safe_restr == nil then
-		return true
-	end
-
-	if not (job.precondition_params) then 
-		return true 
-	end 
-	
-	-- should probably remove, irrelevant in 1.6
-	if job.precondition_params.is_safe_job == nil then
-		job.precondition_params.is_safe_job = xr_gulag.job_in_restrictor(smart, smart.safe_restr, string.gsub(job.section,"logic@","",1))
-	end
-
-	return job.precondition_params.is_safe_job ~= false
+	return true--smart.smart_alarm_time == nil
 end
 
 local function precond_guard_follower(se_obj, smart, job, npc_info)
@@ -329,38 +262,36 @@ end
 job_info_by_job_type_id = {
 	[0]     = {job_type = "point_job", 		prior = 3},																	-- generic_point
 	[1]     = {job_type = "point_job", 		prior = 10},																-- campfire_point
-	[2]		= {job_type = "path_job", 		prior = 60, precondition_function = precond_surge},		-- surge
+	[2]		= {job_type = "path_job", 		prior = 60, precondition_function = precond_surge},							-- surge
 	[3]		= {job_type = "path_job", 		prior = 10, precondition_function = precond_safe_job_sleeper},				-- sleep
 	[4]    	= {job_type = "path_job", 		prior = 25, precondition_function = precond_collector},						-- collector
 	[5]     = {job_type = "path_job", 		prior = 15, precondition_function = precond_safe_job},						-- walker
 	[6]     = {job_type = "path_job", 		prior = 25, precondition_function = precond_safe_job_patrol},				-- patrol
 	[7]   	= {job_type = "smartcover_job", prior = 15, precondition_function = precond_animpoint},						-- animpoint
-	[8]  	= {job_type = "smartcover_job", prior = 60, precondition_function = precond_surge},		-- animpoint_surge
+	[8]  	= {job_type = "smartcover_job", prior = 60, precondition_function = precond_surge},							-- animpoint_surge
 	[9]     = {job_type = "path_job", 		prior = 25, precondition_function = precond_safe_job_guard},				-- guard
 	[10]	= {job_type = "path_job",		prior = 14, precondition_function = precond_safe_job_guard},				-- follower
 	[11]  	= {job_type = "path_job", 		prior = 30, precondition_function = precond_sniper},						-- sniper 
 	[12]    = {job_type = "path_job", 		prior = 45, precondition_function = precond_camper},						-- camper 
 	[13]   	= {job_type = "point_job", 		prior = 30},																-- beh
-	[14]   	= {job_type = "point_job", 		prior = 60, precondition_function = precond_surge},		-- beh_surge
+	[14]   	= {job_type = "point_job", 		prior = 60, precondition_function = precond_surge},							-- beh_surge
 	[15]	= {job_type = "point_job", 		prior = 59, precondition_function = precond_trade_job},						-- beh_trader
 	[16]   	= {job_type = "point_job", 		prior = 40},																-- mob home
 	[17]	= {job_type = "heli_path_job", 	prior = 45},																-- heli_move
 	[18]	= {job_type = "heli_hide_job", 	prior = 100, precondition_function = precond_heli_hide, prefix_name = ""},	-- heli_hide
-	[19]    = {job_type = "point_job",	 	prior = 3}
+	[19]    = {job_type = "point_job",	 	prior = 3}																	-- heli point
 }
 
 ------------------------------------------------------------------------------------
 -- Smart Job Automation functions
 ------------------------------------------------------------------------------------
-local function init_campfire_point_jobs(smart,stalker_jobs,gname)
-	local name, job_ltx
+local function init_campfire_point_jobs(smart,stalker_jobs,gname,ltx)
 	local max_jobs = smart.max_population > 0 and smart.max_population*3 or 1
 	for i=1, max_jobs do
-		name = gname.."_campfire_point_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 0})
+		local name = gname.."_campfire_point_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 1}
 		
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = campfire_point@%s
 
@@ -371,30 +302,28 @@ use_camp = {!npc_community(zombied)} true, false
 anim = {!npc_community(zombied)} sit_ass, guard
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name,gname)
+		job_ltx = strformat(job_ltx,name,name,name,gname)
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx .. "\n" .. job_ltx
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
 		end
+
+		if (smart.ignore_zone) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 	end
 end
 
-local function init_generic_point_jobs(smart,stalker_jobs,gname)
-	local name, job_ltx
+local function init_generic_point_jobs(smart,stalker_jobs,gname,ltx)
 	local max_jobs = smart.max_population > 0 and smart.max_population*3 or 1
 	for i=1, max_jobs do
-		name = gname.."_point_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 1})
+		local name = gname.."_point_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 0}
 		
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = cover@%s
 
@@ -407,30 +336,28 @@ use_attack_direction = false
 anim = {!npc_community(zombied)} sit_ass, guard
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name,gname)
+		job_ltx = strformat(job_ltx,name,name,name,gname)
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx .. "\n" .. job_ltx
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
 		end
+
+		if (smart.ignore_zone) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 	end
  end
 
- local function init_surge_jobs(smart,stalker_jobs,gname)
-	local name, job_ltx
+ local function init_surge_jobs(smart,stalker_jobs,gname,ltx)
 	local i = 1
 	while level.patrol_path_exists(gname.."_surge_"..i.."_walk") do
-		name = gname.."_surge_"..i.."_walk"
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 2})
+		local name = gname.."_surge_"..i.."_walk"
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 2}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = walker@%s
 
@@ -442,75 +369,71 @@ path_walk = surge_%s_walk
 def_state_standing = guard
 def_state_moving = {=dist_to_job_point_ge(25)} sprint, {=dist_to_job_point_ge(5)} run, patrol
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (level.patrol_path_exists(gname.."_surge_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = surge_"..i.."_look\n"
-			end
-
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_surge_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = surge_"..i.."_look\n"
 		end
+
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 		i = i + 1
 	end
  end
 
- local function init_sleep_jobs(smart,stalker_jobs,gname)
- 	local name, job_ltx
+ local function init_sleep_jobs(smart,stalker_jobs,gname,ltx)
 	local i = 1
 	while level.patrol_path_exists(gname.."_sleep_"..i) do
-		name = gname.."_sleep_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 3})
+		local name = gname.."_sleep_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 3}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = sleeper@%s
 
 [sleeper@%s]
 path_main = sleep_%s
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
 		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 
 		i = i + 1
 	end
 end
 
-local function init_collector_jobs(smart,stalker_jobs,gname)
- 	local name, job_ltx
+local function init_collector_jobs(smart,stalker_jobs,gname,ltx)
 	local i = 1
 	while level.patrol_path_exists(gname.."_collector_"..i.."_walk") do
-		name = gname.."_collector_"..i.."_walk"
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 4})
+		local name = gname.."_collector_"..i.."_walk"
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 4}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = walker@%s
 
@@ -521,40 +444,38 @@ path_walk = collector_%s_walk
 def_state_standing = guard
 def_state_moving = patrol
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (level.patrol_path_exists(gname.."_collector_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = collector_"..i.."_look\n"
-			end
-
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_collector_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = collector_"..i.."_look\n"
 		end
+
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 
 		i = i + 1
 	end
 end
 
-local function init_walker_jobs(smart,stalker_jobs,gname)
- 	local name, job_ltx
+local function init_walker_jobs(smart,stalker_jobs,gname,ltx)
 	local i = 1
 	while level.patrol_path_exists(gname.."_walker_"..i.."_walk") do
-		name = gname.."_walker_"..i.."_walk"
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name,	job_type_id = 5})
+		local name = gname.."_walker_"..i.."_walk"
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name,	job_type_id = 5}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = walker@%s
 
@@ -565,37 +486,36 @@ path_walk = walker_%s_walk
 def_state_standing = guard
 def_state_moving = patrol
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (level.patrol_path_exists(gname.."_walker_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = walker_"..i.."_look\n"
-			end
-
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_walker_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = walker_"..i.."_look\n"
 		end
+
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 
 		i = i + 1
 	end
 end
 
-local function init_patrol_jobs(smart,stalker_jobs,gname)
+local function init_patrol_jobs(smart,stalker_jobs,gname,ltx)
 	local ptr, wp_prop, job_count
- 	local name, job_ltx
 	local i = 1
 	while level.patrol_path_exists(gname.."_patrol_"..i.."_walk") do
-        name = gname.."_patrol_"..i.."_walk"
+        local name = gname.."_patrol_"..i.."_walk"
         ptr = patrol(name)
         wp_prop = utils.parse_waypoint_data(name, ptr:flags(0), ptr:name(0))
         job_count = 3
@@ -604,11 +524,10 @@ local function init_patrol_jobs(smart,stalker_jobs,gname)
 		end
 
 		for n = 1, job_count do
-			rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 6})
+			stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 6}
 		end
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = patrol@%s
 
@@ -618,39 +537,38 @@ formation = back
 path_walk = patrol_%s_walk
 ]]
 --on_signal = end| %=search_gulag_job%
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (level.patrol_path_exists(gname.."_patrol_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = patrol_"..i.."_look\n"
-			end
-
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_patrol_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = patrol_"..i.."_look\n"
 		end
+
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
+
 		i = i + 1
 	end
 end
 
-local function init_animpoint_jobs(smart,stalker_jobs,gname)
-	local name, job_ltx
+local function init_animpoint_jobs(smart,stalker_jobs,gname,ltx)
 	local i = 1
 	while se_smart_cover.registered_smartcovers[gname.."_animpoint_"..i] ~= nil do
-		name = gname.."_animpoint_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 7})
+		local name = gname.."_animpoint_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 7}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = animpoint@%s
 
@@ -658,33 +576,33 @@ active = animpoint@%s
 meet = meet@generic_animpoint
 cover_name = %s
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,name)
+		job_ltx = strformat(job_ltx,name,name,name,name)
 
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
 		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
+
 		i = i + 1
 	end
 	
 	-- surge
 	i = 1
 	while se_smart_cover.registered_smartcovers[gname.."_surge_animpoint_"..i] ~= nil do
-		name = gname.."_surge_animpoint_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 8})
+		local name = gname.."_surge_animpoint_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 8}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = animpoint@%s
 
@@ -692,37 +610,36 @@ active = animpoint@%s
 meet = meet@generic_animpoint
 cover_name = %s
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,name)
+		job_ltx = strformat(job_ltx,name,name,name,name)
 
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
 		end
+
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
+
 		i = i + 1
 	end
 end
 
-local function init_guard_jobs(smart,stalker_jobs,gname)
- 	local name, job_ltx
+local function init_guard_jobs(smart,stalker_jobs,gname,ltx)
 	local i = 1
 	local guard_timeout
 	while level.patrol_path_exists(gname.."_guard_"..i.."_walk") do
-		name = gname.."_guard_"..i.."_walk"
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name,	job_type_id = 9})
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@follower_"..name, job_type_id = 10}) --, precondition_params = { changing_job = "logic@"..name }, precondition_function = precond_guard_follower})
+		local name = gname.."_guard_"..i.."_walk"
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name,	job_type_id = 9}
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@follower_"..name, job_type_id = 10} --, precondition_params = { changing_job = "logic@"..name }, precondition_function = precond_guard_follower})
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = walker@%s
 
@@ -730,69 +647,72 @@ active = walker@%s
 meet = meet@generic_lager
 path_walk = guard_%s_walk
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (level.patrol_path_exists(gname.."_guard_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = guard_"..i.."_look\n"
-			end
+		if (level.patrol_path_exists(gname.."_guard_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = guard_"..i.."_look\n"
+		end
 
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
+		end
 
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
 
-			ltx = ltx.."\n\n"..job_ltx
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 
 			--on_info = {!is_obj_on_job(logic@follower_%s:3)} walker@%s
-			job_ltx = [[
+		local job_ltx2 = [[
 [walker1@%s]
 meet = meet@generic_lager
 path_walk = guard_%s_walk
 def_state_standing = wait_na
 ;on_info2 = {=dist_to_obj_on_job_le(logic@follower_%s:4)} remark@%s
 ]]
-			job_ltx = strformat(job_ltx,name,i,name,name,name,name)
+		job_ltx2 = strformat(job_ltx2,name,i,name,name,name,name)
 
-			if (level.patrol_path_exists(gname.."_guard_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = guard_"..i.."_look\n"
-			end
+		if (level.patrol_path_exists(gname.."_guard_"..i.."_look")) then
+			job_ltx2 = job_ltx2.."path_look = guard_"..i.."_look\n"
+		end
 
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx2 = job_ltx2 .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
+		if (smart.def_restr) then
+			job_ltx2 = job_ltx2 .."out_restr = "..smart.def_restr.."\n"
+		end
 
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx2 = job_ltx2 .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
 
-			ltx = ltx.."\n\n"..job_ltx
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx2
 
-			job_ltx = [[
+		local job_ltx3 = [[
 [remark@%s]
 anim = wait_na
 target = job | logic@follower_%s, %s
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,gname)
+		job_ltx3 = strformat(job_ltx3,name,name,gname)
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
+		if (smart.def_restr) then
+			job_ltx3 = job_ltx3 .."out_restr = "..smart.def_restr.."\n"
+		end
 
-			ltx = ltx.."\n\n"..job_ltx
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx3
 
-			job_ltx = [[
+		local job_ltx4 = [[
 [logic@follower_%s]
 active = walker@follow_%s
 
@@ -802,66 +722,67 @@ path_walk = guard_%s_walk
 on_info = {=dist_to_obj_on_job_le(logic@%s:4)} remark@follower_%s
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name,i,name,name)
+		job_ltx4 = strformat(job_ltx4,name,name,name,i,name,name)
 
-			if (level.patrol_path_exists(gname.."_guard_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = guard_"..i.."_look\n"
-			end
+		if (level.patrol_path_exists(gname.."_guard_"..i.."_look")) then
+			job_ltx4 = job_ltx4.."path_look = guard_"..i.."_look\n"
+		end
 
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx4 = job_ltx4 .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
+		if (smart.def_restr) then
+			job_ltx4 = job_ltx4 .."out_restr = "..smart.def_restr.."\n"
+		end
 
-			ltx = ltx.."\n\n"..job_ltx
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx4
 
-			guard_timeout = tostring(math.random(20,21))*1000
+		guard_timeout = tostring(math.random(20,21))*1000
 
-			job_ltx = [[
+		local job_ltx5 = [[
 [remark@follower_%s]
 anim = wait_na
 target = job | logic@%s, %s
 ;on_timer = %s | %=switch_to_desired_job%
 on_info = {!dist_to_obj_on_job_le(logic@%s:4)} walker@follow_%s
 ]]
-			job_ltx = strformat(job_ltx,name,name,gname,guard_timeout)
+		job_ltx5 = strformat(job_ltx5,name,name,gname,guard_timeout)
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (smart.def_restr) then
+			job_ltx5 = job_ltx5 .."out_restr = "..smart.def_restr.."\n"
 		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx5
+
 		i = i + 1
 	end
 end
 
-local function init_sniper_jobs(smart,stalker_jobs,gname)
-	local name, job_ltx, ptr, wp_prop, radius
+local function init_sniper_jobs(smart,stalker_jobs,gname,ltx)
+	local ptr, wp_prop, radius
 	local state
 	local i = 1
 	while level.patrol_path_exists(gname.."_sniper_"..i.."_walk") do
-		name = gname.."_sniper_"..i.."_walk"
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 11})
+		local name = gname.."_sniper_"..i.."_walk"
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 11}
 
-		if (ltx) then
-			ptr = patrol(name)
-			wp_prop = utils.parse_waypoint_data(name, ptr:flags(0), ptr:name(0))
-			state = "guard"
-			if wp_prop.state ~= nil then
-				if wp_prop.state == "stand" then
-					state = "threat"
-				end
+		ptr = patrol(name)
+		wp_prop = utils.parse_waypoint_data(name, ptr:flags(0), ptr:name(0))
+		state = "guard"
+		if wp_prop.state ~= nil then
+			if wp_prop.state == "stand" then
+				state = "threat"
 			end
-			radius = 10
-			if wp_prop.radius ~= nil then
-				 radius = wp_prop.radius
-			end
-			
-			job_ltx = [[
+		end
+		radius = 10
+		if wp_prop.radius ~= nil then
+			 radius = wp_prop.radius
+		end
+		
+		local job_ltx = [[
 [logic@%s]
 active = camper@%s
 
@@ -874,58 +795,58 @@ def_state_campering = %s
 def_state_campering_fire = %s
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name,i,radius,state,"hide_fire")
+		job_ltx = strformat(job_ltx,name,name,name,i,radius,state,"hide_fire")
 
-			if (level.patrol_path_exists(gname.."_sniper_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = sniper_"..i.."_look\n"
-			end
-
-			--[[
-			if (xr_gulag.job_in_restrictor(smart,gname.."_sniper_"..i.."_restr",name)) then 
-				job_ltx = job_ltx.."out_restr = " .. gname.."_sniper_"..i.."_restr"
-			end
-			--]]
-			
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			if (smart.def_restr) then
-				--job_ltx = job_ltx .."out_restr = "..smart.def_restr..","..combat_restrictor.get_job_restrictor(name).."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_sniper_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = sniper_"..i.."_look\n"
 		end
+
+		--[[
+		if (xr_gulag.job_in_restrictor(smart,gname.."_sniper_"..i.."_restr",name)) then 
+			job_ltx = job_ltx.."out_restr = " .. gname.."_sniper_"..i.."_restr"
+		end
+		--]]
+		
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
+
+		if (smart.def_restr) then
+			--job_ltx = job_ltx .."out_restr = "..smart.def_restr..","..combat_restrictor.get_job_restrictor(name).."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
+
 		i = i + 1
 	end
 end
 
-local function init_camper_jobs(smart,stalker_jobs,gname)
-	local name, job_ltx, ptr, wp_prop, radius, state
+local function init_camper_jobs(smart,stalker_jobs,gname,ltx)
+	local ptr, wp_prop, radius, state
 	local i = 1
 	while level.patrol_path_exists(gname.."_camper_"..i.."_walk") do
-		name = gname.."_camper_"..i.."_walk"
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 12})
+		local name = gname.."_camper_"..i.."_walk"
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 12}
 
-		if (ltx) then
-			ptr = patrol(name)
-			wp_prop = utils.parse_waypoint_data(name, ptr:flags(0), ptr:name(0))
-			state = "guard"
-			radius = 10
-			if wp_prop.state ~= nil then
-				if wp_prop.state == "stand" then
-					state = "threat"
-				end
+		ptr = patrol(name)
+		wp_prop = utils.parse_waypoint_data(name, ptr:flags(0), ptr:name(0))
+		state = "guard"
+		radius = 10
+		if wp_prop.state ~= nil then
+			if wp_prop.state == "stand" then
+				state = "threat"
 			end
-			if wp_prop.radius ~= nil then
-				 radius = wp_prop.radius
-			end
+		end
+		if wp_prop.radius ~= nil then
+			 radius = wp_prop.radius
+		end
 
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = camper@%s
 
@@ -933,53 +854,51 @@ active = camper@%s
 meet = meet@generic_lager
 radius = %s
 path_walk = camper_%s_walk
-def_state_moving = rush
+def_state_moving = {=has_enemy} raid, patrol
 def_state_campering = %s
 def_state_campering_fire = %s
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,radius,i,state,"hide_fire")
+		job_ltx = strformat(job_ltx,name,name,name,radius,i,state,"hide_fire")
 
-			if (level.patrol_path_exists(gname.."_camper_"..i.."_look")) then
-				job_ltx = job_ltx.."path_look = camper_"..i.."_look\n"
-			end
-
-			if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-				job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-			end
-
-			--[[
-			if (xr_gulag.job_in_restrictor(smart,gname.."_camper_"..i.."_restr",name)) then 
-				job_ltx = job_ltx.."out_restr = " .. gname.."_camper_"..i.."_restr"
-			end
-			--]]
-			
-			if (smart.def_restr) then
-				--job_ltx = job_ltx .."out_restr = "..smart.def_restr..","..combat_restrictor.get_job_restrictor(name).."\n"
-			end
-
-			if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-				job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_camper_"..i.."_look")) then
+			job_ltx = job_ltx.."path_look = camper_"..i.."_look\n"
 		end
+
+		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+		end
+
+		--[[
+		if (xr_gulag.job_in_restrictor(smart,gname.."_camper_"..i.."_restr",name)) then 
+			job_ltx = job_ltx.."out_restr = " .. gname.."_camper_"..i.."_restr"
+		end
+		--]]
+		
+		if (smart.def_restr) then
+			--job_ltx = job_ltx .."out_restr = "..smart.def_restr..","..combat_restrictor.get_job_restrictor(name).."\n"
+		end
+
+		if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 		i = i + 1
 	end
 end
 
-local function init_beh_jobs(smart,stalker_jobs,gname)
+local function init_beh_jobs(smart,stalker_jobs,gname,ltx)
 	if not (beh_ini) then
 		return
 	end
 
- 	local name, job_ltx
 	local i = 1
 	while beh_ini:section_exist(gname.."_beh_"..i) do
-		name = gname.."_beh_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 13})
+		local name = gname.."_beh_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 13}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = beh@%s
 
@@ -987,26 +906,26 @@ active = beh@%s
 meet = meet@generic_lager
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name)
+		job_ltx = strformat(job_ltx,name,name,name)
 
-			local _root = beh_ini:collect_section(name)
-			for key,val in pairs (_root) do
-				job_ltx = job_ltx .. key .. " = " .. val .. "\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		local _root = beh_ini:collect_section(name)
+		for key,val in pairs (_root) do
+			job_ltx = job_ltx .. key .. " = " .. val .. "\n"
 		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
+
 		i = i + 1
 	end
 
 	-- Beh Surge
 	i = 1
 	while beh_ini:section_exist(gname.."_beh_surge_"..i) do
-		name = gname.."_beh_surge_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 14})
+		local name = gname.."_beh_surge_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 14}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = beh@%s
 
@@ -1014,25 +933,24 @@ active = beh@%s
 meet = meet@generic_lager
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name)
-			local _root = beh_ini:collect_section(name)
-			for key,val in pairs (_root) do
-				job_ltx = job_ltx .. key .. " = " .. val .. "\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		job_ltx = strformat(job_ltx,name,name,name)
+		local _root = beh_ini:collect_section(name)
+		for key,val in pairs (_root) do
+			job_ltx = job_ltx .. key .. " = " .. val .. "\n"
 		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 		i = i + 1
 	end
 
 	-- Beh Trader
 	i = 1
 	while beh_ini:section_exist(gname.."_beh_trade_"..i) do
-		name = gname.."_beh_trade_"..i
-		rawset(stalker_jobs,#stalker_jobs+1,{section = "logic@"..name, job_type_id = 15})
-
-		if (ltx) then
-			job_ltx = [[
+		local name = gname.."_beh_trade_"..i
+		stalker_jobs[#stalker_jobs+1] = {section = "logic@"..name, job_type_id = 15}
+		
+		local job_ltx = [[
 [logic@%s]
 active = beh@%s
 
@@ -1040,27 +958,25 @@ active = beh@%s
 meet = meet@generic_lager
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name)
-			local _root = beh_ini:collect_section(name)
-			for key,val in pairs (_root) do
-				job_ltx = job_ltx .. key .. " = " .. val .. "\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		job_ltx = strformat(job_ltx,name,name,name)
+		local _root = beh_ini:collect_section(name)
+		for key,val in pairs (_root) do
+			job_ltx = job_ltx .. key .. " = " .. val .. "\n"
 		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 		i = i + 1
 	end
 end
 
-local function init_monster_jobs(smart,monster_jobs,gname)
-	local name, job_ltx
+local function init_monster_jobs(smart,monster_jobs,gname,ltx)
 	local max_jobs = smart.max_population > 0 and smart.max_population*4 or 1
 	for i=1, max_jobs do
-		name = gname.."_home_"..i
-		rawset(monster_jobs,#monster_jobs+1,{section = "logic@"..name, job_type_id = 16})
+		local name = gname.."_home_"..i
+		monster_jobs[#monster_jobs+1] = {section = "logic@"..name, job_type_id = 16}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = mob_home@%s
 
@@ -1071,26 +987,24 @@ home_mid_radius = 20
 home_max_radius = 30
 ]]
 
-			job_ltx = strformat(job_ltx,name,name,name)
+		job_ltx = strformat(job_ltx,name,name,name)
 
-			if (smart.def_restr) then
-				job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (smart.def_restr) then
+			job_ltx = job_ltx .."out_restr = "..smart.def_restr.."\n"
 		end
+		
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 	end
 end
 
-local function init_heli_move_jobs(smart,heli_jobs,gname)
-	local name, job_ltx
+local function init_heli_move_jobs(smart,heli_jobs,gname,ltx)
 	local i = 1
 	while level.patrol_path_exists(gname.."_heli_"..i.."_fly") do
-		name = gname.."_heli_"..i.."_fly"
-		rawset(heli_jobs,#heli_jobs+1,{section = "logic@"..name, job_type_id = 17})
+		local name = gname.."_heli_"..i.."_fly"
+		heli_jobs[#heli_jobs+1] = {section = "logic@"..name, job_type_id = 17}
 
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = heli_move@%s
 
@@ -1104,27 +1018,25 @@ fire_trail        = false
 immortal     	  = false
 mute 			  = false
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,i)
+		job_ltx = strformat(job_ltx,name,name,name,i)
 
-			if (level.patrol_path_exists(gname.."_heli_"..i.."_fly_look")) then
-				job_ltx = job_ltx.."path_look = heli_"..i.."_fly_look\n"
-			end
-
-			ltx = ltx.."\n\n"..job_ltx
+		if (level.patrol_path_exists(gname.."_heli_"..i.."_fly_look")) then
+			job_ltx = job_ltx.."path_look = heli_"..i.."_fly_look\n"
 		end
+
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 		i = i + 1
 	end
 end
 
-local function init_heli_hide_jobs(smart,heli_jobs,gname)
-	local name, job_ltx
+local function init_heli_hide_jobs(smart,heli_jobs,gname,ltx)
 	local i = 1
 	local gg = game_graph()
 	local sim = alife()
 	local level_name = sim:level_name(gg:vertex(smart.m_game_vertex_id):level_id())
 
-	if (ltx) then 
-		job_ltx = [[
+	local job_ltx = [[
 [heli_move@hide]
 path_move		  = %s
 retreat_mode      = 2
@@ -1141,18 +1053,16 @@ fire_trail        = false
 immortal     	  = true
 mute 			  = true	
 ]]
-		job_ltx = strformat(job_ltx,level_name.."_heli_hide")
-		ltx = ltx.."\n\n"..job_ltx
-	end 
+	job_ltx = strformat(job_ltx,level_name.."_heli_hide")
+	ltx_size = ltx_size + 1
+	ltx[ltx_size] = job_ltx
 	
 	-- increase if you want more then 1 heli hide job per smart
 	for i=1, 1 do
-		name = gname.."_heli_"..i.."_hide"
+		local name = gname.."_heli_"..i.."_hide"
+		heli_jobs[#heli_jobs+1] = {section = "logic@"..name, job_type_id = 18}
 
-		rawset(heli_jobs,#heli_jobs+1,{section = "logic@"..name, job_type_id = 18})
-
-		if (ltx) then
-			job_ltx = [[
+		local job_ltx = [[
 [logic@%s]
 active = heli_move@%s
 
@@ -1171,24 +1081,21 @@ show_health       = false
 fire_trail        = false
 on_info			  = {=heli_dist_to_max_bounding_le(3)} heli_move@hide
 ]]
-			job_ltx = strformat(job_ltx,name,name,name,level_name.."_goto_hide")
+		job_ltx = strformat(job_ltx,name,name,name,level_name.."_goto_hide")
 
-			ltx = ltx.."\n\n"..job_ltx
-		end
+		ltx_size = ltx_size + 1
+		ltx[ltx_size] = job_ltx
 		i = i + 1
 	end	
 end
 
-local function init_heli_move_point_jobs(smart,heli_jobs,gname)
+local function init_heli_move_point_jobs(smart,heli_jobs,gname,ltx)
 	-- default heli job for all smarts 
-	local name, job_ltx
 	local i = 1
+	local name = gname.."_heli_"..i.."_point"
+	heli_jobs[#heli_jobs+1] = {section = "logic@"..name, job_type_id = 19}
 
-	name = gname.."_heli_"..i.."_point"
-	rawset(heli_jobs,#heli_jobs+1,{section = "logic@"..name, job_type_id = 19})
-
-	if (ltx) then
-		job_ltx = [[
+	local job_ltx = [[
 [logic@%s]
 active = heli_move@%s
 
@@ -1206,29 +1113,29 @@ fire_trail        = false
 immortal     	  = false
 mute 			  = false
 ]]
-		job_ltx = strformat(job_ltx,name,name,name)
+	job_ltx = strformat(job_ltx,name,name,name)
 
-		if (level.patrol_path_exists(gname.."_heli_"..i.."_point_look")) then
-			job_ltx = job_ltx.."path_look = heli_"..i.."_point_look\n"
-		end
-
-		if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
-			job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
-		end
-
-		if (smart.def_restr) then
-			--job_ltx = job_ltx .."out_restr = "..smart.def_restr..","..combat_restrictor.get_job_restrictor(name).."\n"
-		end
-
-		if (smart.base_on_actor_control and smart.base_on_actor_control.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.base_on_actor_control.ignore_zone, name)) then
-			job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.base_on_actor_control.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
-		end
-
-		ltx = ltx.."\n\n"..job_ltx
+	if (level.patrol_path_exists(gname.."_heli_"..i.."_point_look")) then
+		job_ltx = job_ltx.."path_look = heli_"..i.."_point_look\n"
 	end
+
+	if (smart.safe_restr and xr_gulag.job_in_restrictor(smart, smart.safe_restr, name)) then
+		job_ltx = job_ltx .. "invulnerable = {=npc_in_zone("..smart.safe_restr..")} true\n"
+	end
+
+	if (smart.def_restr) then
+		--job_ltx = job_ltx .."out_restr = "..smart.def_restr..","..combat_restrictor.get_job_restrictor(name).."\n"
+	end
+
+	if (smart.ignore_zone and xr_gulag.job_in_restrictor(smart, smart.ignore_zone, name)) then
+		job_ltx = job_ltx .."combat_ignore_cond = {=npc_in_zone("..smart.ignore_zone..")} true\ncombat_ignore_keep_when_attacked = true\n"
+	end
+
+	ltx_size = ltx_size + 1
+	ltx[ltx_size] = job_ltx
 end
 
-local function add_exclusive_job(smart,sect, work_field, smart_ini, job_table)
+local function add_exclusive_job(smart,sect, work_field, smart_ini)
 	local work = smart_ini:r_string_ex(sect,work_field)
 	if not (work) then
 		return
@@ -1279,6 +1186,9 @@ local function add_exclusive_job(smart,sect, work_field, smart_ini, job_table)
 	end
 
 	local condlist = xr_logic.parse_condlist(smart, lsec, "suitable", job_suitable)
+	-- if (condlist) then
+		-- alun_utils.print_table(condlist,ini_path)
+	-- end
 
 	local new_job = {section = lsec, ini_path = ini_path, ltx = job_ini_file, job_type = job_type, prior = new_prior, precondition_params = { condlist = condlist },	precondition_function = precond_exclusive, prefix_name = prefix, exclusive = true}
 	if (is_monster) then
@@ -1293,6 +1203,7 @@ end
 -- LOAD SMART JOBS
 -- called in smart_terrain.script
 ---------------------------------------------------------------------------------------
+local str_builder = {}
 function load_job(smart)
 	-- Reset Unique ID counter for each smart_terrain
 	ids = 0
@@ -1303,14 +1214,15 @@ function load_job(smart)
 
 	local gname = smart:name()
 	
-	ltx = [[
+	ltx_size = 1
+	str_builder[ltx_size] = [[
 [meet@generic_lager]
 close_distance                 = {=is_wounded} 0, {!is_squad_commander} 0, {!after_first_meet !actor_friend =actor_has_weapon} 3, 3
 close_anim                     = {=is_wounded} nil, {!is_squad_commander} nil, {=actor_has_weapon} nil, talk_default
 close_snd_hello                = {=is_wounded} nil, {!is_squad_commander} nil, {=actor_enemy} nil, {!after_first_meet !actor_friend =actor_has_weapon} meet_stop, meet_hello
 close_snd_bye                  = nil
 close_victim                   = {=is_wounded} nil, {!is_squad_commander} nil, actor
-far_distance                   = {=is_wounded} 0, {!is_squad_commander} 0, {!after_first_meet !actor_friend =actor_has_weapon} 10, 5
+far_distance                   = {=is_wounded} 0, {!is_squad_commander} 0, {!after_first_meet !actor_friend =actor_has_weapon} 5, 5
 far_anim                       = {=is_wounded} nil, {!is_squad_commander} nil, {!after_first_meet !actor_friend =actor_has_weapon} threat_na, nil
 far_snd                        = {=is_wounded} nil, {!is_squad_commander} nil, {=actor_enemy} nil, {!after_first_meet !actor_friend =actor_has_weapon} meet_hide_weapon, meet_wait
 far_victim                     = {=is_wounded} nil, {!is_squad_commander} nil, actor
@@ -1348,26 +1260,26 @@ use_text                       = nil
 	local heli_jobs = {}
 
 	-- create heli jobs 
-	init_heli_move_jobs(smart,heli_jobs,gname)
-	init_heli_move_point_jobs(smart,heli_jobs,gname)
-	init_heli_hide_jobs(smart,heli_jobs,gname)
+	init_heli_move_jobs(smart,heli_jobs,gname,str_builder)
+	init_heli_move_point_jobs(smart,heli_jobs,gname,str_builder)
+	init_heli_hide_jobs(smart,heli_jobs,gname,str_builder)
 	
 	-- create stalker jobs
-	init_campfire_point_jobs(smart,stalker_jobs,gname)
-	init_generic_point_jobs(smart,stalker_jobs,gname)
-	init_surge_jobs(smart,stalker_jobs,gname)
-	init_sleep_jobs(smart,stalker_jobs,gname)
-	init_collector_jobs(smart,stalker_jobs,gname)
-	init_walker_jobs(smart,stalker_jobs,gname)
-	init_patrol_jobs(smart,stalker_jobs,gname)
-	init_animpoint_jobs(smart,stalker_jobs,gname)
-	init_guard_jobs(smart,stalker_jobs,gname)
-	init_sniper_jobs(smart,stalker_jobs,gname)
-	init_camper_jobs(smart,stalker_jobs,gname)
-	init_beh_jobs(smart,stalker_jobs,gname)
+	init_campfire_point_jobs(smart,stalker_jobs,gname,str_builder)
+	init_generic_point_jobs(smart,stalker_jobs,gname,str_builder)
+	init_surge_jobs(smart,stalker_jobs,gname,str_builder)
+	init_sleep_jobs(smart,stalker_jobs,gname,str_builder)
+	init_collector_jobs(smart,stalker_jobs,gname,str_builder)
+	init_walker_jobs(smart,stalker_jobs,gname,str_builder)
+	init_patrol_jobs(smart,stalker_jobs,gname,str_builder)
+	init_animpoint_jobs(smart,stalker_jobs,gname,str_builder)
+	init_guard_jobs(smart,stalker_jobs,gname,str_builder)
+	init_sniper_jobs(smart,stalker_jobs,gname,str_builder)
+	init_camper_jobs(smart,stalker_jobs,gname,str_builder)
+	init_beh_jobs(smart,stalker_jobs,gname,str_builder)
 
 	-- create monster jobs
-	init_monster_jobs(smart,monster_jobs,gname)
+	init_monster_jobs(smart,monster_jobs,gname,str_builder)
 
 	-- reference newly created job tables
 	smart.stalker_jobs = stalker_jobs
@@ -1379,15 +1291,14 @@ use_text                       = nil
 	if (smart_ini:section_exist("smart_terrain")) then
 		if smart_ini:section_exist("exclusive") then
 			local n = smart_ini:line_count("exclusive")
-			local id, value = "",""
 			for i=0,n-1 do
-				result, id, value  = smart_ini:r_line("exclusive",i,"","")
-				add_exclusive_job(smart,"exclusive", id, smart_ini, job_table)
+				local result, id, value  = smart_ini:r_line("exclusive",i,"","")
+				add_exclusive_job(smart,"exclusive", id, smart_ini)
 			end
 		else
 			local num = 1
 			while smart_ini:line_exist("smart_terrain", "work"..num) do
-				add_exclusive_job(smart,"smart_terrain", "work"..num, smart_ini, job_table)
+				add_exclusive_job(smart,"smart_terrain", "work"..num, smart_ini)
 				num = num + 1
 			end
 		end
@@ -1398,17 +1309,10 @@ use_text                       = nil
 	table.sort(smart.monster_jobs,	function(a,b) return get_job_prior(a) > get_job_prior(b) end)
 	table.sort(smart.heli_jobs,		function(a,b) return get_job_prior(a) > get_job_prior(b) end)
 
-	if (ltx) then
-		--[[
-		local cfg = io.open(getFS():update_path('$game_config$', "gulag\\"..gname..".ltx"),"wb+")
-		if (cfg) then
-			cfg:write(ltx)
-			cfg:close()
-		end
-		--]]
-
-		db.dynamic_ltx[gname] = create_ini_file(ltx)
-		smart.ltx = db.dynamic_ltx[gname]
-		smart.ltx_name = "*"..gname
-	end
+	-- generate the INI file
+	db.dynamic_ltx[gname] = create_ini_file(table.concat(str_builder,"\n"))
+	smart.ltx = db.dynamic_ltx[gname]
+	smart.ltx_name = "*"..gname
+	
+	iempty_table(str_builder)
 end

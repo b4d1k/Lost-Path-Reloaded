@@ -40,5 +40,5 @@ end
 
 function bandit_companion_task_1_give_reward(a,b)
 	dialogs.relocate_money(db.actor,math.random(2500,4000),"in")
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"bandit", 50})
+	game_relations.change_factions_community_num("bandit",0,50)
 end

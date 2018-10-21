@@ -32,7 +32,7 @@ function help_wounded(npc)
 	end
 
 	local selected_id = st.selected_id
-	local selected_npc = selected_id and db.storage[selected_id] and db.storage[selected_id].object or selected_id and level.object_by_id(selected_id)
+	local selected_npc = selected_id and db.storage[selected_id] and db.storage[selected_id].object
 
 	-- reset scheme dependent variables
 	if (st.selected_id and db.storage[st.selected_id]) then
@@ -190,7 +190,7 @@ function evaluator_wounded_exist:find_valid_target()
 	local see = dist <= 900 --or npc:see(vo) or npc:memory_time(vo) <= 30000
 	if (see) and (self.a.nearest_dist == nil or dist < self.a.nearest_dist) then 
 		local vertex = level.vertex_id(vo_position)
-		if (vertex and vertex < 4294967295) then
+		if (vertex and level.valid_vertex(vertex)) then
 			if level.vertex_position(vertex):distance_to_sqr(vo_position) > 16 then
 				vertex = vo:level_vertex_id()
 			end
@@ -224,7 +224,12 @@ function evaluator_wounded_exist:evaluate()
 	if (xr_danger.has_danger(npc)) then
 		return false
 	end
-
+	
+	local st = db.storage[npc:id()]
+	if (st) and (st.active_scheme == "camper") then 
+		return false 
+	end
+	
 	local vis = npc:get_visual_name()
 	if not (HelpInCombat or HelpInCombatVisuals[vis]) then
 		if (has_enemy(npc)) then
@@ -251,7 +256,6 @@ function action_help_wounded:initialize()
 	local npc = self.object
 	npc:set_desired_position()
 	npc:set_desired_direction()
-	npc:set_path_type(game_object.level_path)
 	--npc:set_dest_level_vertex_id(self.a.vertex_id)
 	self.a.vertex_id = utils.send_to_nearest_accessible_vertex(npc, self.a.vertex_id,"xr_help_wounded")
 
@@ -372,7 +376,6 @@ function add_to_binder(npc,char_ini,scheme,section,st,temp)
 
 	temp.action = action_help_wounded (npc:name(),"action_help_wounded", st)
 	temp.action:add_precondition(wp(stalker_ids.property_alive, true))
-	temp.action:add_precondition(wp(stalker_ids.property_anomaly,false))
 	
 	temp.action:add_effect(wp(xr_evaluators_id.wounded_exist, false))
 	

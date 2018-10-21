@@ -15,10 +15,11 @@ function find_smart_under_faction_control(actor,npc,p)
 	
 	local target_id
 	for name,smart in pairs(SIMBOARD.smarts_by_names) do 
-		if (smart.online) and (smart.sim_avail == nil or xr_logic.pick_section_from_condlist(actor, smart, smart.sim_avail) == "true") then 
+		if (smart.online) and (simulation_objects.available_by_id[smart.id] == true) then 
 			local smrt = SIMBOARD.smarts[smart.id]
 			if (smrt) then 
-				for k,squad in pairs(smrt.squads) do
+				for k,v in pairs(smrt.squads) do
+					local squad = alife_object(k)
 					if (squad and squad.stay_time and squad.current_target_id and squad.current_target_id == smart.id and not squad:get_script_target()) then
 						for i=2,#p do
 							if (p[i] == "monster" and is_squad_monster[squad.player_id] or squad.player_id == p[i]) then
@@ -45,18 +46,16 @@ function find_smart_under_faction_control_ex(actor,npc,p)
 		
 	local target_id
 	for name,smart in pairs(SIMBOARD.smarts_by_names) do 
-		if (smart.sim_avail == nil or xr_logic.pick_section_from_condlist(actor, smart, smart.sim_avail) == "true") then 
+		if (simulation_objects.available_by_id[smart.id] == true) then 
 			local smrt = SIMBOARD.smarts[smart.id]
 			if (smrt) then 
-				local smart_level = alife():level_name(game_graph():vertex(smart.m_game_vertex_id):level_id())
-				if (smart.online or DEACTIVATE_SIM_ON_NON_LINKED_LEVELS ~= true or string.find(simulation_objects.config:r_value(actor_level,"target_maps",0,""),smart_level)) then
-					for k,squad in pairs(smrt.squads) do
-						if (squad and squad.current_target_id and squad.current_target_id == smart.id and not squad:get_script_target()) then
-							for i=2,#p do
-								if (p[i] == "monster" and is_squad_monster[squad.player_id] or squad.player_id == p[i]) then
-									utils.save_var(db.actor,p[1],smart.id)
-									return
-								end
+				for k,v in pairs(smrt.squads) do
+					local squad = alife_object(k)
+					if (squad and squad.current_target_id and squad.current_target_id == smart.id and not squad:get_script_target()) then
+						for i=2,#p do
+							if (p[i] == "monster" and is_squad_monster[squad.player_id] or squad.player_id == p[i]) then
+								utils.save_var(db.actor,p[1],smart.id)
+								return
 							end
 						end
 					end
@@ -78,9 +77,9 @@ function remove_task_companion(actor,npc,p)
 	axr_companions.companion_squads[squad.id] = nil
 	
 	for k in squad:squad_members() do
-		local npc = k.id and (db.storage[k.id] and db.storage[k.id].object or level.object_by_id(k.id))
+		local npc = k.id and db.storage[k.id] and db.storage[k.id].object
 		if (npc) then
-			axr_logic.restore_scheme_and_logic(npc)
+			xr_logic.restore_scheme_and_logic(npc)
 			npc:disable_info_portion("npcx_is_companion")
 			npc:disable_info_portion("npcx_beh_cannot_dismiss")
 			
@@ -137,6 +136,7 @@ function on_init_bounty_hunt(actor,npc,p)
 	axr_task_manager.bounties_by_id[p[1]] = nil 
 	
 	local valid_targets = {}
+	local size_t = 0
 	local sim = alife()
 	local comm
 	local sfind = string.find
@@ -152,27 +152,34 @@ function on_init_bounty_hunt(actor,npc,p)
 		if (se_obj and IsStalker(nil,se_obj:clsid()) and se_obj:alive() and sfind(se_obj:section_name(),"sim_default") and get_object_story_id(i) == nil) and (se_obj.group_id == nil or se_obj.group_id == 65535 or get_object_story_id(se_obj.group_id) == nil) then
 			comm = alife_character_community(se_obj)
 			if (faction_lookup[comm] == true) then 
-				table.insert(valid_targets,i)
+				size_t = size_t + 1 
+				valid_targets[size_t] = i
 			end
 		end
 	end
 	
-	local size = #valid_targets
-	if (size <= 0) then
+	if (size_t <= 0) then
 		printf("on_init_bounty_hunt failed, no targets")
 		return 
 	end
 	
-	local target_id = valid_targets[math.random(size)]
+	local target_id = valid_targets[math.random(size_t)]
 	if not(target_id) then
 		return 
 	end
 	
 	axr_task_manager.bounties_by_id[p[1]] = target_id
-	
-	--printf("on_init_bounty_hunt %s",target_id)
-	
-	--utils.save_var(db.actor,p[1],target_id)
+
+	local function postpone_for_next_frame(target_id)
+		local se_obj = sim:object(target_id)
+		if (se_obj) then
+			local news_caption = game.translate_string(task_manager.task_ini:r_string_ex(p[1], "title")) or "error"
+			local news_text = game.translate_string("st_mm_faction_cap_character_name") .. " " .. se_obj:character_name() .. "\\n " .. game.translate_string("st_mm_faction_cap_faction") .. " " .. game.translate_string(se_obj:community())
+			db.actor:give_talk_message2(news_caption, news_text, se_obj:character_icon(), "iconed_answer_item")
+		end
+		return true
+	end
+	CreateTimeEvent(0,"on_init_bounty_hunt",0,postpone_for_next_frame,target_id)
 end 
 
 function fail_task_dec_goodwill(actor,npc,p)
@@ -215,7 +222,7 @@ function reward_item_cost_mult_and_remove(actor,npc,p)
 	if not (item) then 
 		return 
 	end 
-	dialogs.relocate_money(db.actor, math.floor((tonumber(p[2]) or 1)*item:cost()) ,"in")
+	dialogs.relocate_money(db.actor, (tonumber(p[2]) or 1)*item:cost()*item:condition() ,"in")
 	remove_item(actor, npc, {sec,p[3]})
 end 
 
@@ -223,7 +230,12 @@ function reward_random_item(actor,npc,p)
 	if (#p > 0) then 
 		local section = p[math.random(#p)]
 		if (system_ini():section_exist(section)) then
-			alife():create(section,vector(),0,0,0)
+			local se_item = alife():create(section,vector():set(0,0,0),0,0,0)
+			local cls = se_item:clsid()
+			if (IsWeapon(nil,cls) and cls ~= clsid.wpn_knife_s) then
+				se_item.condition = math.random(60,90)/100
+			end
+			news_manager.relocate_item(db.actor, "in", section)
 		end
 	end
 end
@@ -274,7 +286,7 @@ function setup_companion_task(actor,npc,p)
 			utils.se_obj_save_var(se_obj.id,se_obj:name(),"companion_cannot_dismiss",true)
 			utils.se_obj_save_var(se_obj.id,se_obj:name(),"companion_cannot_teleport",p[4] == "true")
 			if (p[5] == "true") then 
-				xrs_kill_wounded.hostage_list[se_obj.id] = smart.id
+				axr_task_manager.hostages_by_id[se_obj.id] = smart.id
 			end
 		end
 	end
@@ -287,7 +299,7 @@ end
 function setup_task_target_anomaly(actor,npc,p)
 	local targets = {}
 	for k,v in pairs(db.anomaly_by_name) do 
-		table.insert(targets,k)
+		targets[#targets+1] = k
 	end
 	
 	if (#targets <= 0) then 
@@ -375,7 +387,13 @@ function setup_artefact_fetch_task(actor,npc,p)
 		"af_electra_moonlight",
 		"af_dummy_battery",
 		"af_dummy_dummy",
-		"af_ice"
+		"af_ice",
+		"af_rusty_thorn",
+		"af_rusty_kristall",
+		"af_rusty_sea",
+		"af_ameba_slime",
+		"af_ameba_slug",
+		"af_ameba_mica"
 		}
 	
 		artefact = arts[math.random(#arts)]
@@ -391,7 +409,6 @@ function setup_weapon_fetch_task(actor,npc,p)
 		dialogs._FETCH_TEXT = game.translate_string(system_ini():r_string_ex(wpn,"inv_name") or "")
 	else
 		local itm = {
-				"wpn_bm16",
 				"wpn_toz34",
 				"wpn_wincheaster1300",
 				"wpn_spas12",
@@ -408,8 +425,6 @@ function setup_weapon_fetch_task(actor,npc,p)
 				"wpn_vintorez",
 				"wpn_svu",
 				"wpn_svd",
-				"wpn_rg-6",
-				"wpn_rpg7",
 				"wpn_g36",
 				"wpn_fn2000",
 				"wpn_pkm"
@@ -797,7 +812,7 @@ function stop_postprocess(actor, npc, p)
 end
 
 function run_tutorial(actor, npc, p)
-	printf("run tutorial called")
+	--printf("run tutorial called")
 	game.start_tutorial(p[1])
 end
 
@@ -1046,10 +1061,15 @@ function teleport_npc_by_story_id(actor, npc, p)
 	end
 end
 
+-- Teleports a squad, by story id, to another location
+-- param1 - squad story id 
+-- param2 - path name
+-- param3 - optional path index
 function teleport_squad(actor, npc, p)
 	local squad = p[1] and get_story_squad(p[1])
 	if not (squad) then
 		printf("There is no squad with story id [%s]", p[1])
+		return
 	end
 	
 	local path = patrol(p[2])
@@ -1058,9 +1078,54 @@ function teleport_squad(actor, npc, p)
 		return 
 	end
 	
-	local idx = p[3] or 0
+	printf("before tele squad %s",p[1])
+	local idx = tonumber(p[3]) or 0
 	TeleportSquad(squad,path:point(idx),path:level_vertex_id(idx),path:game_vertex_id(idx))
 	--squad:set_squad_position(path:point(idx))
+	printf("after tele squad %s",p[1])
+end
+
+-- Teleports a server object, by story id, to another location
+-- param1 - squad story id 
+-- param2 - path name
+-- param3 - optional path index
+function teleport_object(actor,npc,p)
+	local se_obj = p[1] and get_story_se_object(p[1])
+	if not (se_obj) then
+		printf("There is no se_obj with story id [%s]", p[1])
+		return
+	end
+	
+	local path = patrol(p[2])
+	if not (path) then
+		printf("Wrong parameters in 'teleport_object' function!!!")
+		return 
+	end
+	
+	printf("before tele obj %s",p[1])
+	local idx = tonumber(p[3]) or 0
+	TeleportObject(se_obj.id,path:point(idx),path:level_vertex_id(idx),path:game_vertex_id(idx))
+	printf("after tele obj %s",p[1])
+end
+
+-- param1 - path name
+-- param2 - optional look path
+-- param3 - optional path index; default is 0
+function change_level(actor,npc,p)
+	local path = p[1] and patrol(p[1])
+	if not (path) then 
+		printf("xr_effects.teleport_actor no patrol path %s exists!",p[1])
+		return 
+	end 
+	
+	local idx = p[3] and tonumber(p[3]) or 0
+	if (p[2]) then
+		local look = patrol(p[2])
+		local dir = -look:point(idx):sub(path:point(idx)):getH()
+		db.actor:set_actor_direction(dir)
+	end
+	
+	ChangeLevel(path:point(idx), path:level_vertex_id(idx), path:game_vertex_id(idx), db.actor:direction())
 end
 
 function jup_teleport_actor(actor, npc)
@@ -1246,13 +1311,13 @@ function hit_obj(actor, npc, p)
 	if p[5] then
 		sid = get_story_object(sid)
 		if sid then
-			h.direction = vector():sub(sid:position(), obj:position())
+			h.direction = vec_sub(sid:position(), obj:position())
 		end
 		if not sid then
-			h.direction = vector():sub(patrol(p[5]):point(0), obj:position())
+			h.direction = vec_sub(patrol(p[5]):point(0), obj:position())
 		end
 	else
-		h.direction = vector():sub(npc:position(), obj:position())
+		h.direction = vec_sub(npc:position(), obj:position())
 	end
 	h.draftsman = sid or npc
 	h.type = hit.wound
@@ -1277,13 +1342,13 @@ function hit_obj_chemical(actor, npc, p)
 	if p[5] then
 		sid = get_story_object(sid)
 		if sid then
-			h.direction = vector():sub(sid:position(), obj:position())
+			h.direction = vec_sub(sid:position(), obj:position())
 		end
 		if not sid then
-			h.direction = vector():sub(patrol(p[5]):point(0), obj:position())
+			h.direction = vec_sub(patrol(p[5]):point(0), obj:position())
 		end
 	else
-		h.direction = vector():sub(npc:position(), obj:position())
+		h.direction = vec_sub(npc:position(), obj:position())
 	end
 
 	h.draftsman = sid or npc
@@ -1308,13 +1373,13 @@ function hit_obj_fire_wound(actor, npc, p)
 	if p[5] then
 		sid = get_story_object(sid)
 		if sid then
-			h.direction = vector():sub(sid:position(), obj:position())
+			h.direction = vec_sub(sid:position(), obj:position())
 		end
 		if not sid then
-			h.direction = vector():sub(patrol(p[5]):point(0), obj:position())
+			h.direction = vec_sub(patrol(p[5]):point(0), obj:position())
 		end
 	else
-		h.direction = vector():sub(npc:position(), obj:position())
+		h.direction = vec_sub(npc:position(), obj:position())
 	end
 
 	h.draftsman = sid or npc
@@ -1339,7 +1404,7 @@ function hit_by_killer(actor, npc, p)
 		return false
 	end
 
-	local killer = db.storage[t.killer].object or level.object_by_id(t.killer)
+	local killer = db.storage[t.killer] and db.storage[t.killer].object
 	if not (killer) then
 		return false
 	end
@@ -1404,7 +1469,7 @@ end
 
 function hit_actor(actor, npc, p)
 	local h = hit()
-	h.direction = vector():set(0,0,0)
+	h.direction = VEC_ZERO
 	h.draftsman = actor
 	h.type = hit.shock
 	h:bone("bip01_spine")
@@ -1941,7 +2006,7 @@ function spawn_object_in(actor, obj, p)
 		if box == nil then
 			printf("xr_effects.spawn_object_in There is no such object %s", p[2])
 		end
-		alife():create(spawn_sect,vector(),0,0,target_obj_id)
+		alife():create(spawn_sect,vector():set(0,0,0),0,0,target_obj_id)
 	else
 		printf("xr_effects.spawn_object_in object is nil %s", tostring(p[2]))
 	end
@@ -2133,16 +2198,16 @@ end
 ]]--
 
 function create_squad(actor, obj, p)
-	if obj ~= nil then
-		printf("pl:creating_squad from obj [%s] in section [%s]", tostring(obj:name()), tostring(db.storage[obj:id()].active_section))
-	end
+
 	local squad_id = p[1]
 	if squad_id == nil then
 		printf("Wrong squad identificator [NIL] in create_squad function")
+		return
 	end
 	local smart_name = p[2]
 	if smart_name == nil then
 		printf("Wrong smart name [NIL] in create_squad function")
+		return
 	end
 
 	local ltx = system_ini()
@@ -2157,12 +2222,12 @@ function create_squad(actor, obj, p)
 		printf("Wrong smart_name [%s] for [%s] faction in create_squad function", tostring(smart_name), tostring(player_name))
 	end
 
-	printf("Create squad %s BEFORE",squad_id)
+	--printf("Create squad %s BEFORE",squad_id)
 	local squad = board:create_squad(smart, squad_id)
 	if not (squad) then 
 		return
 	end
-	printf("Create squad %s AFTER",squad_id)
+	--printf("Create squad %s AFTER",squad_id)
 
 	--board:enter_smart(squad, smart.id)
 
@@ -2175,7 +2240,6 @@ function create_squad(actor, obj, p)
 	end
 
 	--squad:update()
-	return squad
 end
 
 function create_squad_member(actor, obj, p)
@@ -2199,21 +2263,43 @@ function create_squad_member(actor, obj, p)
 	end
 
 	if p[3] ~= nil then
-		local spawn_point
 		if p[3] == "simulation_point" then
-			spawn_point = system_ini():r_string_ex(squad:section_name(),"spawn_point")
-			if spawn_point == "" or spawn_point == nil then
-				spawn_point = xr_logic.parse_condlist(obj, "spawn_point", "spawn_point", squad_smart.spawn_point)
-			else
-				spawn_point = xr_logic.parse_condlist(obj, "spawn_point", "spawn_point", spawn_point)
+			local spawn_point_condlist = system_ini():r_string_to_condlist(squad:section_name(),"spawn_point")
+			if (spawn_point_condlist) then 
+				local spawn_point = xr_logic.pick_section_from_condlist(db.actor, obj, spawn_point_condlist)
+				if (spawn_point and spawn_point ~= "") then 
+					local pat = patrol(spawn_point)
+					if (pat) then
+						position = pat:point(0)
+						level_vertex_id = pat:level_vertex_id(0)
+						game_vertex_id 	= pat:game_vertex_id(0)
+					end
+				end
 			end
-			spawn_point = xr_logic.pick_section_from_condlist(db.actor, obj, spawn_point)
-		else
-			spawn_point = p[3]
+			
+			if not (position and level_vertex_id and game_vertex_id) then 
+				if (squad_smart.spawn_point) then
+					local pat = patrol(squad_smart.spawn_point)
+					if (pat) then
+						position = pat:point(0)
+						level_vertex_id = pat:level_vertex_id(0)
+						game_vertex_id 	= pat:game_vertex_id(0)
+					end
+				end
+			end
+		elseif (p[3] ~= nil) then
+			local pat = patrol(p[3])
+			if (pat) then
+				position = pat:point(0)
+				level_vertex_id = pat:level_vertex_id(0)
+				game_vertex_id 	= pat:game_vertex_id(0)
+			end
 		end
-		position 		= patrol(spawn_point):point(0)
-		level_vertex_id = patrol(spawn_point):level_vertex_id(0)
-		game_vertex_id 	= patrol(spawn_point):game_vertex_id(0)
+		if not (position and level_vertex_id and game_vertex_id) then 
+			position = squad.position
+			level_vertex_id = squad.m_level_vertex_id
+			game_vertex_id = squad.m_game_vertex_id
+		end
 	else
 		local commander = alife_object(squad:commander_id())
 		position		= commander.position
@@ -2290,22 +2376,6 @@ function heal_squad(actor, obj, p)
 	end
 end
 
---[[
-function update_squad(actor, obj, p)
-	local squad_id = p[1]
-	if squad_id == nil then
-		printf("Wrong squad identificator [NIL] in remove_squad function")
-	end
-	local board = SIMBOARD
-	local squad = board.squads[squad_id]
-	if squad == nil then
-		assert("Wrong squad identificator [%s]. squad doesnt exist", tostring(squad_id))
-		return
-	end
-	squad:update()
-end
-]]--
-
 -- this deletes squads from a smart
 function clear_smart_terrain(actor, obj, p)
 	local smart_name = p[1]
@@ -2317,11 +2387,14 @@ function clear_smart_terrain(actor, obj, p)
 	local smart = board.smarts_by_names[smart_name]
 	local smart_id = smart.id
 	for k,v in pairs(board.smarts[smart_id].squads) do
-		if p[2] and p[2] == "true" then
-			board:remove_squad(v)
-		else
-			if not get_object_story_id(v.id) then
-				board:remove_squad(v)
+		local squad = alife_object(k)
+		if (squad) then
+			if p[2] and p[2] == "true" then
+				board:remove_squad(squad)
+			else
+				if not get_object_story_id(squad.id) then
+					board:remove_squad(squad)
+				end
 			end
 		end
 	end
@@ -2332,15 +2405,15 @@ function flush_smart_terrain(actor,obj,p)
 	local smart_name = p[1]
 	if smart_name == nil then
 		printf("Wrong squad identificator [NIL] in clear_smart_terrain function")
+		return
 	end
 
-	local board = SIMBOARD
-	
 	local function unregister(squad)
 		squad.assigned_target_id = nil
 		squad.current_target_id = nil
 		squad.current_action = nil
-		board:assign_squad_to_smart(squad, nil)
+		squad.was_forced_offline = true
+		SIMBOARD:assign_squad_to_smart(squad, nil)
 		for k in squad:squad_members() do
 			local se_obj = alife_object(k.id)
 			if (se_obj) then
@@ -2355,14 +2428,17 @@ function flush_smart_terrain(actor,obj,p)
 		end
 	end
 	
-	local smart = board.smarts_by_names[smart_name]
+	local smart = SIMBOARD.smarts_by_names[smart_name]
 	local smart_id = smart.id
-	for k,v in pairs(board.smarts[smart_id].squads) do
-		if p[2] and p[2] == "true" then
-			unregister(v)
-		else
-			if not get_object_story_id(v.id) then
-				unregister(v)
+	for k,v in pairs(SIMBOARD.smarts[smart_id].squads) do
+		local squad = alife_object(k)
+		if (squad) then
+			if p[2] and p[2] == "true" then
+				unregister(squad)
+			else
+				if not get_object_story_id(k) then
+					unregister(squad)
+				end
 			end
 		end
 	end	
@@ -2688,7 +2764,7 @@ function make_actor_visible_to_squad(actor,npc,p)
 	local squad = get_story_squad(story_id)
 	if squad == nil then printf("There is no squad with id[%s]", story_id) end
 	for k in squad:squad_members() do
-		local obj = level.object_by_id(k.id)
+		local obj = db.storage[k.id] and db.storage[k.id].object
 		if obj ~= nil then
 			obj:make_object_visible_somewhen( db.actor )
 		end
@@ -3116,10 +3192,10 @@ function jup_b202_inventory_box_relocate(actor, npc)
 	local inv_box_in = get_story_object("jup_b202_snag_treasure")
 	local items_to_relocate = {}
 	local function relocate(inv_box_out, item)
-		table.insert(items_to_relocate, item)
+		items_to_relocate[#items_to_relocate+1] = item
 	end
 	inv_box_out:iterate_inventory_box	(relocate, inv_box_out)
-	for k,v in pairs(items_to_relocate) do
+	for k,v in ipairs(items_to_relocate) do
 		inv_box_out:transfer_item(v, inv_box_in)
 	end
 end
@@ -3136,7 +3212,7 @@ function clear_box(actor, npc, p)
 	local items_table = {}
 
 	local function add_items(inv_box, item)
-		table.insert(items_table, item)
+		items_table[#items_table+1] = item
 	end
 
 	inv_box:iterate_inventory_box(add_items, inv_box)
@@ -3199,7 +3275,7 @@ function forward_game_time(actor, npc, p)
 end
 
 function stop_tutorial()
-	printf("stop tutorial called")
+	--printf("stop tutorial called")
 	game.stop_tutorial()
 end
 
@@ -3418,7 +3494,7 @@ function zat_b202_spawn_random_loot(actor, npc, p)
 			end
 		until (prap) and ((max_weight - weight_table[n]) >= 0)
 		max_weight = max_weight - weight_table[n]
-		table.insert(spawned_item,n)
+		spawned_item[#spawned_item+1] = n
 		local item = math.random(1, #si_table[n])
 		for k,v in pairs(si_table[n][item].item) do
 			spawn_object_in(actor, npc, {tostring(v),"jup_b202_snag_treasure"})
@@ -3609,12 +3685,13 @@ function sleep(actor, npc)
 						"pri_a16_sr_sleep",
 						"pri_monolith_sleep",
 						"pri_room27_sleep",
+						"pripyat_secret_sleep_sr",
 						"rad_sleep_room",
 						"ros_vagon_sleep",
 						"val_abandoned_house_sleep",
 						"val_vagon_sleep",
 						"yan_bunker_sleep_restrictor",
-						"zat_a2_sr_sleep"
+						"zat_a2_sr_sleep",
 					}
 
 	for k,v in pairs(sleep_zones) do
@@ -4160,11 +4237,16 @@ function jup_b200_count_found(actor)
 end
 
 function sr_teleport(actor,npc,p)
-	ui_sr_teleport.msg_box_ui(npc,p and p[1],p and p[2])
+	ui_sr_teleport.create(npc,p and p[1],p and p[2])
 end
 
 function make_a_wish(actor,npc,p)
 	local action_list = {}
+	
+	-- Prevent Monolith or Zombified players from making a wish.
+	if (character_community(db.actor) == "actor_zombied" or character_community(db.actor) == "actor_monolith") then
+		return
+	end
 	
 	action_list[1] = function()
 		error(game.translate_string("st_wish_granted"),2)
@@ -4202,7 +4284,7 @@ function make_a_wish(actor,npc,p)
 				if (list) then
 					for kk,vv in pairs(list) do 
 						if (sysini:section_exist(vv)) then
-							sim:create(vv,vector(),0,0,0)
+							sim:create(vv,vector():set(0,0,0),0,0,0)
 						end
 					end
 				end
@@ -4248,7 +4330,7 @@ function make_a_wish(actor,npc,p)
 --			local gvid = spawn_path:game_vertex_id(0)
 --			local gg = game_graph()
 --			if (gvid and gg:valid_vertex_id(gvid)) then
---				ChangeLevel(pos,lvid,gvid,vector():set(0,0,0))
+--				ChangeLevel(pos,lvid,gvid,VEC_ZERO)
 --			end
 --		end
 
@@ -4256,18 +4338,11 @@ function make_a_wish(actor,npc,p)
 --		Goodwill is increased with the Monolith and Zombified faction to ensure they aren't hostile.
 		inc_faction_goodwill_to_actor(db.actor, nil, {"monolith", 5000})
 		inc_faction_goodwill_to_actor(db.actor, nil, {"zombied", 5000})
-		ChangeLevel(vector():set(266.99, 0.00, -131.07), 310937, 181, vector():set(0,0,0))
+		ChangeLevel(vector():set(266.99, 0.00, -131.07), 310937, 181, VEC_ZERO)
 		return 
 	end
 	
-	-- Hide and disable the immortality wish if actor is in Zombified or Monolith factions.
-	if (character_community(db.actor) == "actor_zombied" or character_community(db.actor) == "actor_monolith") then
-		action_list[5] = nil
-		ui_dyn_msg_box.multi_choice(action_list,"st_wish_1","st_wish_2","st_wish_3","st_wish_4","st_wish_99")
-	else
-		ui_dyn_msg_box.multi_choice(action_list,"st_wish_1","st_wish_2","st_wish_3","st_wish_4","st_wish_5","st_wish_99")
-	end
-	
+	ui_dyn_msg_box.multi_choice(action_list,"st_wish_1","st_wish_2","st_wish_3","st_wish_4","st_wish_5","st_wish_99")
 end
 
 function clear_logic(actor,npc,p)
@@ -4313,8 +4388,8 @@ end
 function kill_obj_on_job(actor,npc,p)
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	obj = obj and level.object_by_id(obj)
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local obj = id and db.storage[id] and db.storage[id].object
 	if not obj or not obj:alive() then
 		return false
 	end
@@ -4323,7 +4398,7 @@ function kill_obj_on_job(actor,npc,p)
 	h:bone("bip01_neck")
 	h.power = 1
 	h.impulse = 1
-	h.direction = vector():sub(npc:position(), obj:position())
+	h.direction = vec_sub(npc:position(), obj:position())
 	h.draftsman = npc
 	h.type = hit.wound
 	obj:hit(h)
@@ -4332,8 +4407,8 @@ end
 function obj_at_job_switch_section(actor,npc,p)
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	obj = obj and level.object_by_id(obj)
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local obj = id and db.storage[id] and db.storage[id].object
 	if not obj or not obj:alive() then
 		return
 	end
@@ -4462,7 +4537,7 @@ function x18_gluk (actor, npc)
 		local sound_obj_l		= xr_sound.get_safe_sound_object( [[affects\psy_blackout_l]] )
         local sound_obj_r		= xr_sound.get_safe_sound_object( [[affects\psy_blackout_r]] )
         local snd_obj			= xr_sound.get_safe_sound_object( [[affects\tinnitus3a]] )
-		snd_obj:play_no_feedback(db.actor, sound_object.s2d, 0, vector(), 1.0)
+		snd_obj:play_no_feedback(db.actor, sound_object.s2d, 0, VEC_ZERO, 1.0)
 		sound_obj_l:play_no_feedback(db.actor, sound_object.s2d, 0, vector():set(-1, 0, 1), 1.0)
 		sound_obj_r:play_no_feedback(db.actor, sound_object.s2d, 0, vector():set( 1, 0, 1), 1.0)
 	level.add_cam_effector("camera_effects\\earthquake.anm", 1974, false, "")
@@ -4494,7 +4569,7 @@ end
 
 function aes_earthshake (npc)
 	local snd_obj = xr_sound.get_safe_sound_object([[ambient\earthquake]])
-	snd_obj:play_no_feedback(db.actor, sound_object.s2d, 0, vector(), 1.0)
+	snd_obj:play_no_feedback(db.actor, sound_object.s2d, 0, VEC_ZERO, 1.0)
 	level.add_cam_effector("camera_effects\\earthquake.anm", 1974, false, "")
     --set_postprocess ("scripts\\earthshake.ltx")
 end
@@ -4525,7 +4600,7 @@ function play_snd(actor, npc, p)
 	if p[1] then
 		local snd_obj = xr_sound.get_safe_sound_object(p[1])
 		--snd_obj:play(actor, p[2] or 0, sound_object.s2d)
-		snd_obj:play_no_feedback(actor, sound_object.s2d, p[2] or 0, vector(), 1.0)
+		snd_obj:play_no_feedback(actor, sound_object.s2d, p[2] or 0, VEC_ZERO, 1.0)
 	end
 end
 
@@ -4830,4 +4905,15 @@ function force_always_online(actor,npc,p)
 	
 	alife():set_switch_offline(squad.id,false)
 	alife():set_switch_online(squad.id,true)
+end
+
+function set_smart_alarm_status(actor,npc,p)
+	local smart = p[1] and SIMBOARD:get_smart_by_name(p[1])
+	if (smart) then
+		smart:set_alarm()
+	end
+end
+
+function setup_base_defense_fail_conditions(actor,npc,p)
+	utils.save_var(db.actor,"base_defense_level",level.name())
 end

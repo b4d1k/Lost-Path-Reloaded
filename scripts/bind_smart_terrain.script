@@ -30,13 +30,13 @@ class "smart_terrain_binder" ( object_binder )
 function smart_terrain_binder:__init( obj ) super( obj )
 end
 
-function smart_terrain_binder:net_spawn( server_object )
-	if not object_binder.net_spawn( self, server_object ) then
+function smart_terrain_binder:net_spawn( se_abstract )
+	if not object_binder.net_spawn( self, se_abstract ) then
 		return false
 	end
 
 	-- получить ссылку на настоящий серверный объект
-	self.se_smart_terrain = alife_object( server_object.id )
+	self.se_smart_terrain = alife_object( se_abstract.id )
 
 	db.add_zone( self.object )
 

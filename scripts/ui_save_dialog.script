@@ -46,7 +46,8 @@ end
 
 function save_dialog:InitControls()
 	self:SetWndRect(Frect():set(0,0,1024,768))
-
+	self:SetAutoDelete(true)
+	
 	self.list_file_font = GetFontMedium()
 	self.list_date_font = GetFontMedium()
 
@@ -55,9 +56,10 @@ function save_dialog:InitControls()
 
 	local ctrl
 
-	xml:InitWindow					("background", 0, self)
+	xml:InitStatic("background", self)
 
 	ctrl							= CUIWindow()
+	ctrl:SetAutoDelete(true)
 	xml:InitWindow					("file_item:main", 0, ctrl)
 
 	self.file_item_main_sz			= vector2():set(ctrl:GetWidth(),ctrl:GetHeight())

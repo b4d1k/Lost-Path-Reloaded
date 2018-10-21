@@ -20,12 +20,15 @@ function crow_binder:__init(obj) super(obj)
 end
 -- Class update
 function crow_binder:update(delta)
--- standart update
+-- standard update
     object_binder.update(self, delta)
 	if not (self.object:alive()) then
 		if (self.body_timer<=time_global()-120000) and (self.body_timer~=0) then
 			printf("releasing object ["..self.object:name().."]")
-			alife():release(alife_object(self.object:id()), true)
+			local se_obj = alife_object(self.object:id())
+			if (se_obj) then
+				alife():release(se_obj)
+			end
 		end
 		--Alundaio
 		local looted = utils.load_var(self.object,"looted",nil)
@@ -58,8 +61,8 @@ function crow_binder:reinit()
 	self.st = db.storage[self.object:id()]
 end
 -- Net spawn
-function crow_binder:net_spawn(sobject)
-    if not(object_binder.net_spawn(self, sobject)) then
+function crow_binder:net_spawn(se_abstract)
+    if not(object_binder.net_spawn(self, se_abstract)) then
         return false
     end
     db.add_obj(self.object)

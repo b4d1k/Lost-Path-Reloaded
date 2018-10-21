@@ -137,7 +137,7 @@ function hit_callback(obj,amount,dir,who,bone_index)
 	if not (Enabled) then
 		return
 	end
-
+	if (bone_index == "from_death_callback") then return end
 	if not(db.storage[obj:id()].facer) then return end
 	if (who and IsStalker(who) and IsMonster(who) and who:alive() and check_enemy(who,obj)) then
 		local target_id = utils.load_var(obj,"facer_target",nil)
@@ -209,7 +209,7 @@ function action_facer:execute()
 		end
 	elseif self.hit_time < tg then
 		--printf("facer[%s]:run hit",npc:character_name())
-		local spos,tpos = npc:bone_position("bip01_neck"),alun_utils.safe_bone_pos(target,"bip01_neck")
+		local spos,tpos = alun_utils.safe_bone_pos(npc,"bip01_neck"),alun_utils.safe_bone_pos(target,"bip01_neck")
 		local ysub = spos.y - tpos.y
 		local cls,bone = target:clsid()
 		if cls == clsid.script_stalker or alun_utils.is_actor(nil,cls) then
@@ -257,7 +257,7 @@ function action_facer:execute()
 			hi.power = power/math.random(70,120)
 			hi.impulse = math.random(50)*2
 			hi.draftsman = npc
-			hi.direction = alun_utils.safe_bone_pos(target,bone):sub(npc:bone_position("bip01_neck"))
+			hi.direction = alun_utils.safe_bone_pos(target,bone):sub(alun_utils.safe_bone_pos(npc,"bip01_neck"))
 			if (math.random(1,100)/100) < hi.power*2 then
 				if (enable_drop_item and alun_utils.is_actor(nil,cls)) then
 					local item,slot = target:active_item(),target:active_slot()
@@ -368,7 +368,7 @@ function evaluator_steal_up:evaluate()
 	end
 	
 	local vid = target:level_vertex_id()
-	if (vid < 4294967295 and npc:accessible(vid) and level.vertex_position(vid):distance_to_sqr(tpos) < 3) then
+	if (level.valid_vertex(vid) and npc:accessible(vid) and level.vertex_position(vid):distance_to_sqr(tpos) < 3) then
 		return true
 	end
 
@@ -385,7 +385,6 @@ function action_steal_up:initialize()
 	local npc,wpn = self.object,self.object:active_item()
 	npc:set_desired_position()
 	npc:set_desired_direction()
-	npc:set_path_type(game_object.level_path)
 	npc:clear_animations()
 	npc:set_movement_type(move.run)
 end
@@ -400,6 +399,9 @@ function action_steal_up:execute()
 		return
 	end
 	--npc:set_dest_level_vertex_id(target:level_vertex_id())
+	if (npc:path_type() ~= game_object.level_path) then 
+		npc:set_path_type(game_object.level_path)
+	end
 	utils.send_to_nearest_accessible_vertex(npc,target:level_vertex_id(),"xrs_facer")
 end
 function action_steal_up:finalize()

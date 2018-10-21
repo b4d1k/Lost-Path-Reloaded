@@ -11,7 +11,7 @@ combat_action_ids = {
 						-- basically if your scheme sets body/movement states manually and doesn't use set_state, then you need it here
 						[stalker_ids.action_combat_planner] = true,
 						[stalker_ids.action_danger_planner] = true,
-						[stalker_ids.action_anomaly_planner] = true,
+						--[stalker_ids.action_anomaly_planner] = true,
 						[xrs_facer.actid_facer] = true,
 						[xrs_facer.actid_steal_up_facer] = true,
 						[xr_danger.actid] = true
@@ -26,7 +26,7 @@ no_idle_alife_ids = {	[xr_actions_id.stohe_meet_base + 1] = true
 -- Should be faster than mgr.planner:action(id):evaluate() right?
 
 local function eval_movement(mgr,npc)
-	return state_lib.states[mgr.target_state].movement == nil or state_lib.states[mgr.target_state].movement == npc:target_movement_type() and not npc:is_body_turning()
+	return (state_lib.states[mgr.target_state].movement == nil or state_lib.states[mgr.target_state].movement == npc:target_movement_type()) and not npc:is_body_turning()
 end
 
 local function eval_animstate_locked(mgr)
@@ -189,26 +189,36 @@ end
 class "act_state_mgr_to_idle" (action_base)
 function act_state_mgr_to_idle:__init(name,state_manager) super (nil, name)
 	self.st = state_manager
+	self.fast_set_true = {fast_set = true} -- avoid gc
 end
 function act_state_mgr_to_idle:initialize()
 	action_base.initialize(self)
+
 	self.object:inactualize_patrol_path()
 	self.object:set_path_type(game_object.level_path)
-	utils.send_to_nearest_accessible_vertex( self.object, self.object:level_vertex_id(), "state_mgr_to_idle" )
+	utils.send_to_nearest_accessible_vertex( self.object, self.object:level_vertex_id() )
+
+	if (self.object:best_enemy() or self.object:best_danger()) then
+		self.st:set_state("idle", nil, nil, nil, self.fast_set_true)
+		return
+	end
+
+	self.st:set_state("idle")
 end
 
 function act_state_mgr_to_idle:execute()
-	--callstack()
 	--alun_utils.debug_write(strformat("act_state_mgr_to_idle:execute %s",self.object:name()))
-	action_base.execute(self)
-	if (self.st.target_state ~= "idle") then
-		self.object:clear_animations()
-		self.st:set_state("idle",nil,nil,nil,{fast_set = true})
-		self.st.animation:set_state(nil,true)
-		self.st.animation:set_control()
-		self.st.animstate:set_state(nil,true)
-		self.st.animstate:set_control()
+	self.object:inactualize_patrol_path()
+	self.object:set_path_type(game_object.level_path)
+	utils.send_to_nearest_accessible_vertex( self.object, self.object:level_vertex_id() )
+
+	if (self.object:best_enemy() or self.object:best_danger()) then
+		self.st:set_state("idle", nil, nil, nil, self.fast_set_true)
+	else 
+		self.st:set_state("idle")
 	end
+	
+	action_base.execute(self)
 end
 
 function act_state_mgr_to_idle:finalize()
@@ -306,17 +316,17 @@ function act_state_mgr_end:execute()
 		end
 	end
 	
-	local t = state_lib.states[self.st.target_state].weapon
-	local wpn = self.object:best_weapon()
-
+	local wpn = state_mgr_weapon.get_weapon(self.object,self.st.target_state) --self.object:best_weapon()
 	if not IsWeapon(wpn) then
 		return
 	end
 	
+	local t = state_lib.states[self.st.target_state].weapon
+	
 	if (t == "sniper_fire" or t == "fire") then
 		-- local o = self.st.look_object and db.storage[self.st.look_object] and db.storage[self.st.look_object].object
 		-- if (o == nil or o:alive()) then
-			if (self.st.planner:evaluator(state_mgr_goap.properties["direction"]):evaluate()) then
+			if (self.st.look_object == nil or self.st.planner:evaluator(state_mgr_goap.properties["direction"]):evaluate()) then
 				if (t == "sniper_fire") then
 					local aim = math.random(500,1500)
 					self.st.npc:set_item(object.fire1, wpn, 1, aim)
@@ -359,7 +369,6 @@ function state_manager:__init(npc)
 	self.target_state = "idle"
 	self.current_direction = nil
 	self.target_position = nil
-	self.current_object = nil
 	self.combat = false
 	self.alife = true
 	self.need_reweapon = false
@@ -379,16 +388,12 @@ function state_manager:set_state(state_name, callback, timeout, target, extra)
 	self.look_object = target and target.look_object and (type(target.look_object) == "number" and target.look_object or target.look_object.id and target.look_object:id()) or nil
 	self.look_dir = target and target.look_dir or nil
 
-	local switched = false
 	local last_state = self.target_state
-
-	if (self.target_state == state_name) then
+	if (last_state == state_name) then
 		return
 	end
 
-	self.current_object = nil
-
-	if (state_lib.states[self.target_state].weapon == "fire" or state_lib.states[self.target_state].weapon == "sniper_fire") then
+	if (state_lib.states[last_state].weapon == "fire" or state_lib.states[last_state].weapon == "sniper_fire") then
 		if (state_lib.states[state_name].weapon ~= "fire" and state_lib.states[state_name].weapon ~= "sniper_fire") then
 			if (self.npc:active_item() and self.npc:best_weapon() and self.npc:weapon_unstrapped()) then
 				self.npc:set_item(object.idle, state_mgr_weapon.get_weapon(self.npc, state_name))
@@ -488,7 +493,7 @@ function state_manager:update()
 	local id = self.planner:current_action_id()
 
 	while id and id ~= lid and id ~= state_mgr_goap.operators["end"] and id ~= state_mgr_goap.operators["locked"] do
-		--alun_utils.debug_write("current_action_id = "..(xrs_debug_tools.actions_by_stalker_ids[id] or id),true)
+		--alun_utils.debug_write("current_action_id = "..(xrs_debug_tools.actions_by_stalker_ids and xrs_debug_tools.actions_by_stalker_ids[id] or id),true)
 		self.planner:update()
 		
 		lid = id
@@ -573,6 +578,7 @@ function bind_manager(object)
 
 	action = manager:action(xr_actions_id.alife)
 	action:add_precondition(wp(xr_evaluators_id.state_mgr + 2,true))
+	--action:add_effect(wp(xr_evaluators_id.state_mgr + 2,false))
 
 	--[[
 	action = manager:action(stalker_ids.action_gather_items)
@@ -581,19 +587,19 @@ function bind_manager(object)
 
 	action = manager:action(stalker_ids.action_combat_planner)
 	action:add_precondition(wp(xr_evaluators_id.state_mgr + 1,true))
+	--action:add_effect(wp(xr_evaluators_id.state_mgr + 1,false))
 	
-	local combat_action_planner = cast_planner(action)
-	combat_action_planner:remove_action(stalker_ids.action_kill_enemy_if_not_visible)
+	--local combat_action_planner = cast_planner(action)
+	--combat_action_planner:remove_action(stalker_ids.action_kill_enemy_if_not_visible)
 
-	action = manager:action(stalker_ids.action_anomaly_planner)
-	action:add_precondition(wp(xr_evaluators_id.state_mgr + 1,true))
-
-	--local anomaly_action_planner = cast_planner(action)
-	--anomaly_action_planner:remove_action(stalker_ids.detect_anomaly)
+	-- Alun: As of Mar 3 2017 Anomaly Planner removed from engine
+	-- Remove anomaly_action_planner
+	-- manager:remove_action(stalker_ids.action_anomaly_planner)
 	 
 	action = manager:action(stalker_ids.action_danger_planner)
 	action:add_precondition(wp(xr_evaluators_id.state_mgr + 1,true))
-
+	--action:add_effect(wp(xr_evaluators_id.state_mgr + 1,false))
+	
 	return state_manager
 end
 

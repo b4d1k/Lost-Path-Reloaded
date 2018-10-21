@@ -4,10 +4,11 @@
 -- by Alundaio
 ---------------------------------
 local ini = ini_file("plugins\\itms_manager.ltx")
+
 	--Backpack stash mod
 	local BackPackStashEnable = ini:r_bool_ex("backpack_stash","enable",false)
 	local BackPackStashAllowInBase = BackPackStashEnable and ini:r_bool_ex("backpack_stash","allow_in_base",false)
-	local BackPackStashSpot = BackPackStashEnable and ini:r_string_ex("backpack_stash","map_spot") or "treasure" 
+	local BackPackStashSpot = BackPackStashEnable and ini:r_string_ex("backpack_stash","map_spot") or "treasure_player" 
 	local BackPackStashEnableTip = BackPackStashEnable and ini:r_bool_ex("backpack_stash","enable_news_tip",false)
 	local BackPackStashEnableUi = BackPackStashEnable and ini:r_bool_ex("backpack_stash","enable_ui",false)
 
@@ -18,13 +19,6 @@ local ini = ini_file("plugins\\itms_manager.ltx")
 	local SleepBagGameStart = SleepBagEnable and ini:r_bool_ex("sleeping_bag","have_at_start",false)
 	local SleepBagSections = SleepBagEnable and alun_utils.collect_section(ini,"sleeping_bag_sections",true)
 	local SleepBagPlaceableSections = SleepBagEnable and alun_utils.collect_section(ini,"sleeping_bag_ph_sections",true)
-
-	-- Actor backpack mod
-	local ActorBackPackEnable = ini:r_bool_ex("actor_backpack","enable",false)
-	local ActorBackPackSpot = ActorBackPackEnable and ini:r_string_ex("actor_backpack","map_spot") or "treasure"
-	local ActorBackPackSlot = ActorBackPackEnable and ini:r_string_ex("actor_backpack","quick_slot") or "slot_3"
-	local ActorBackPackKeep = ActorBackPackEnable and alun_utils.collect_section(ini,"actor_backpack_keep_items",true)
-	local ActorBackPackForced = ActorBackPackEnable and ini:r_bool_ex("actor_backpack","actor_backpack_always_have",false)
 
 	-- Repair mod
 	local RepairModEnable = ini:r_bool_ex("repair_mod","enable",true)
@@ -47,7 +41,6 @@ ShowMessageTime = nil
 
 
 function on_game_start()
-	RegisterScriptCallback("on_game_load",on_game_load)
 	RegisterScriptCallback("actor_on_update",actor_on_update)
 	RegisterScriptCallback("actor_on_item_drop",actor_on_item_drop)
 	RegisterScriptCallback("monster_on_actor_use_callback",monster_on_actor_use_callback)
@@ -57,32 +50,6 @@ function on_game_start()
 
 	RegisterScriptCallback("CUIActorMenu_OnItemDropped",on_item_drag_dropped)
 	RegisterScriptCallback("CUIActorMenu_OnItemFocusReceive",on_item_focus)
-end
-
-function on_game_load()
-
-
-	if (ActorBackPackEnable and ActorBackPackForced) then
-		local actor_itm_backpack_id= utils.load_var(db.actor,"actor_itm_backpack_id",nil)
-		local actor_inv_backpack_id = utils.load_var(db.actor,"actor_inv_backpack_id",nil)
-		if (not actor_itm_backpack_id and not actor_inv_backpack_id) then
-			get_console():execute(ActorBackPackSlot.." itm_actor_backpack")
-			local se_obj = alife():create("itm_actor_backpack",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),0)
-			if (se_obj) then
-				utils.save_var(db.actor,"actor_itm_backpack_id",se_obj.id)
-			end
-		end
-	end
-
-	--[[
-	if (SleepBagEnable and SleepBagGameStart) then
-		local sleepbag_id = utils.load_var(db.actor,"itm_sleepbag_id",nil)
-		if (not sleepbag_id) then
-			local se_obj = alife():create("itm_sleepbag",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),0)
-			utils.save_var(db.actor,"itm_sleepbag_id",se_obj.id)
-		end
-	end
-	--]]
 end
 
 function on_item_focus(itm)
@@ -145,6 +112,8 @@ function on_item_drag_dropped(itm1,itm2,from_slot,to_slot)
 		if not (IsWeapon(itm2) or IsOutfit(itm2) or IsHeadgear(itm2)) then
 			return
 		end
+	else 
+		return
 	end
 	
 	local cur_condition = itm2:condition()
@@ -210,10 +179,7 @@ end
 
 local torch_delay
 -- bind_stalker update
-local actor_fill_backpack
 function actor_on_update()
-	check_actor_backpack()
-
 	if (FlashlightModEnable) then
 		local obj = db.actor:active_detector()
 		local torch = db.actor:object("device_torch")
@@ -255,17 +221,6 @@ function actor_on_item_drop(obj)
 	if not (obj) then
 		return
 	end
-	if (ActorBackPackEnable and ActorBackPackForced and obj:section() == "itm_actor_backpack") then
-		local se_itm = alife():create("itm_actor_backpack",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),db.actor:id())
-
-		if not (se_itm) then
-			return
-		end
-
-		utils.save_var(db.actor,"actor_itm_backpack_id",se_itm.id)
-		alife():release( alife_object(obj:id()) )
-	end
-	
 	if (db.actor:has_info("actor_made_wish_for_riches")) then 
 		db.actor:transfer_item(obj,db.actor)
 	end
@@ -276,12 +231,16 @@ function monster_on_actor_use_callback(obj,who)
 		return
 	end
 
-	local looted = utils.load_var(obj,"looted",nil)
+	local looted = utils.se_obj_load_var(obj:id(),obj:name(),"looted")
 	if (looted) then
 		return
 	end
 
-	utils.save_var(obj,"looted",true)
+	if (obj:clsid() == clsid.crow) then
+		utils.save_var(obj, "looted", true)
+	else
+		utils.se_obj_save_var(obj:id(),obj:name(),"looted",true)
+	end
 	xr_corpse_detection.set_valuable_loot(obj:id(),false)
 
 	local st = db.storage[obj:id()]
@@ -313,62 +272,13 @@ function actor_on_item_use(obj)
 		return 
 	end
 
-	-- Backpack
-	if (BackPackStashEnable and obj:section() == "itm_backpack") then
-
-		if (BackPackStashAllowInBase ~= true) then
-			local in_base
-			local zone
-			local t = {"zat_a2_sr_no_assault","jup_a6_sr_no_assault","jup_b41_sr_no_assault"}
-			for i=1,#t do
-				zone = db.zone_by_name[t[i]]
-				if (zone and zone:inside(db.actor:position())) then
-					in_base = true
-					break
-				end
-			end
-
-			if (in_base) then
-				SetHudMsg(game.translate_string("st_stash_unsafe"),4)
-				alife():create("itm_backpack",db.actor:position(),0,0,0)
-				return
-			end
-		end
-
-		local se_obj = alife():create("inv_backpack",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id())
-		if (se_obj) then
-			local level_name = level.name()
-
-			if not (BackPackStashEnableUi) then
-				local count = utils.load_var(db.actor, level_name.."bpk_count", 0)
-				utils.save_var(db.actor, level_name.."bpk_count", count+1)
-				level.map_add_object_spot_ser(se_obj.id, BackPackStashSpot, game.translate_string(level_name).." "..game.translate_string("st_itm_stash").." "..count+1)
-			else
-				local hud = get_hud()
-				if (hud) then
-					hud:HideActorMenu()
-					local ui = ui_itm_backpack and ui_itm_backpack.backpack_ui(hud,se_obj.id,BackPackStashSpot)
-					if (ui) then
-						ui:ShowDialog(true)
-					end
-				end
-			end
-
-			if (BackPackStashEnableTip) then
-				SetHudMsg(game.translate_string("st_stash_created"),4)
-			end
-		end
-		return
-	end
-
-
-
 	-- Sleeping bag
 	if (SleepBagEnable and SleepBagSections[obj:section()]) then
 		local sec = obj:section()
 		if (SleepBagPlaceable) then
 			local ph_sec = system_ini():r_string_ex(sec,"placeable_section")
 			local se_obj = alife():create(ph_sec or "ph_sleepbag",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id())
+			level.map_add_object_spot_ser(se_obj.id, "ui_pda2_actor_sleep_location", game.translate_string("st_itm_sleepbag_name"))
 		else
 			local se_obj = alife():create(sec,db.actor:position(),0,0,0)
 			local hud = get_hud()
@@ -378,22 +288,6 @@ function actor_on_item_use(obj)
 			local ui = ui_sleep_dialog.sleep_bag(se_obj,sec)
 		end
 		return
-	end
-
-	-- Actor backpack
-	if (ActorBackPackEnable and obj:section() == "itm_actor_backpack") then
-		local id = ActorBackPackForced and utils.load_var(db.actor,"actor_inv_backpack_id",nil)
-		if (id) then
-			SetHudMsg(game.translate_string("st_stash_placed"),4)
-			alife():create("itm_actor_backpack",db.actor:position(),0,0,0)
-			return
-		end
-
-		local se_obj = alife():create("inv_actor_backpack",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id())
-
-		level.map_add_object_spot_ser(se_obj.id, ActorBackPackSpot, strformat(game.translate_string("st_itm_stash_of_character"),db.actor:character_name()))
-
-		utils.save_var(db.actor,"actor_inv_backpack_id",se_obj.id)
 	end
 
 	-- Repair mod
@@ -431,62 +325,9 @@ function actor_on_item_use(obj)
 	-- Deployable mgun
 	if (obj:section() == "itm_deployable_mgun") then
 		local pos = vector():set(device().cam_pos)
-		pos:add(device().cam_dir:mul(3))
+		pos:add( vector():set(device().cam_dir):mul(3) )
 		alife():create("deployable_mgun",pos,level.vertex_id(pos),db.actor:game_vertex_id())
 	end
-end
-
-function check_actor_backpack()
-	if (db.actor:has_info("actor_filled_backpack"))then
-		return
-	end
-
-	local id = utils.load_var(db.actor,"actor_inv_backpack_id",nil)
-
-	if not (id) then
-		return
-	end
-
-	local se_obj = alife_object(id)
-	if not (se_obj) then 
-		return 
-	end
-	local st = db.storage[se_obj.id]
-	local obj = st and st.object or level.object_by_id(id)
-
-	if not (obj) then
-		return
-	end
-
-	if (db.actor:has_info("actor_made_wish_for_riches")) then
-		return 
-	end
-	
-	local function itr_inv(temp,item)
-		local id = item and item:section() ~= "itm_actor_backpack" and ActorBackPackKeep[item:section()] == nil and item:id()
-		if (id and not is_ammo_for_wpn(item:section())) then
-			local itm_slot
-			local equipped
-			for i=1,12 do
-				if (i ~= 4) then
-					itm_slot = db.actor:item_in_slot(i)
-					if (itm_slot and itm_slot:id() == id) then
-						equipped = true
-						break
-					end
-				end
-			end
-
-			if (not equipped) then
-				db.actor:transfer_item(item,obj)
-			end
-			equipped = nil
-		end
-	end
-
-	db.actor:iterate_inventory(itr_inv)
-
-	db.actor:give_info_portion("actor_filled_backpack")
 end
 
 -- bind_stalker take_item_from_iventory_box
@@ -511,25 +352,6 @@ function actor_on_item_take_from_box(box,obj)
 			alife():create("itm_backpack",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),db.actor:id())
 
 			alife():release( alife_object(box:id()) ,true)
-		end
-	end
-
-	-- Actor backpack section
-	if (ActorBackPackEnable and box:section() == "inv_actor_backpack") then
-		if (box:is_inv_box_empty()) then
-			local hud = get_hud()
-			if (hud) then
-				hud:HideActorMenu()
-			end
-
-			level.map_remove_object_spot(box:id(), BackPackActorSpot)
-
-			alife():release( alife_object(box:id()) ,true)
-
-			alife():create("itm_actor_backpack",db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),db.actor:id())
-
-			utils.save_var(db.actor,"actor_inv_backpack_id",nil)
-			db.actor:disable_info_portion("actor_filled_backpack")
 		end
 	end
 end
@@ -579,22 +401,23 @@ function loot_mutant(obj,cls,t,npc)
 		[clsid.bloodsucker_s] 	= "bloodsucker",
 		[clsid.boar_s] 			= "boar",
 		[clsid.burer_s] 		= "burer",
+		[clsid.cat_s]			= "cat",
 		[clsid.chimera_s]		= "chimera",
 		[clsid.controller_s]	= "controller",
+		--[clsid.crow]			= "crow",			-- only because in binder it is not saved
 		[clsid.dog_s]			= "dog",
 		[clsid.flesh_s]			= "flesh",
+		[clsid.fracture_s]		= "fracture",
 		[clsid.gigant_s]		= "gigant",
+		[clsid.karlik_s]		= "karlik",
 		[clsid.poltergeist_s]	= "poltergeist",
-		[clsid.psy_dog_s]		= "psy_dog",
-		[clsid.psy_dog_phantom_s] = "psy_dog",
 		[clsid.pseudodog_s]		= "pseudodog",
+		[clsid.psy_dog_phantom_s] = "psy_dog",
+		[clsid.psy_dog_s]		= "psy_dog",
+		[clsid.rat_s]			= "rat",
 		[clsid.snork_s]			= "snork",
 		[clsid.tushkano_s]		= "tushkano",
-		[clsid.cat_s]			= "cat",
-		[clsid.fracture_s]		= "fracture",
-		[clsid.zombie_s]		= "zombie",
-		[clsid.crow]			= "crow",
-		[clsid.rat_s]			= "rat"
+		[clsid.zombie_s]		= "zombie"	
 	}
 
 	local loot_table = alun_utils.collect_section(ini,clsid_to_section[cls])

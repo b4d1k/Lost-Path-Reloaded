@@ -31,6 +31,11 @@ function pda_encyclopedia_tab:__init() super()
 	self:InitCategories()
 end
 
+-- Finalize.
+function pda_encyclopedia_tab:__finalize()
+	SINGLETON = nil 
+end
+
 -- Article and category items.
 class "pda_encyclopedia_entry" (CUIListBoxItem)
 function pda_encyclopedia_entry:__init() super(22)
@@ -65,7 +70,7 @@ function pda_encyclopedia_tab:SelectArticle(index1, index2)
 	self.information:SetText(game.translate_string(section .. "_text"))
 	
 	-- Lock the required articles if the guide wasn't cheated.
-	if not has_alife_info("guide_cheated") then
+	if not has_alife_info("unlocked_guide") then
 		for k, v in pairs (self.locked) do
 			if (section == v) then
 				self.information:SetText(game.translate_string("pda_btn_encyclopedia_locked"))
@@ -100,13 +105,15 @@ end
 -- Add all of the required articles to a list box.
 -- Called when selecting a category, do not call via constructor.
 function pda_encyclopedia_tab:InitArticles(category)
+	-- Blank the article list before changing category.
+	self.article_list:RemoveAll()
+	
 	-- Return if the articles table cannot be retrieved.
 	local articles = category and category.articles or nil
 	if not (articles) then return end
 	
 	local item = nil
 	local section = nil
-	self.article_list:RemoveAll()
 	for i = 1, #articles do
 		item = pda_encyclopedia_entry()
 		section = articles[i]
@@ -182,17 +189,27 @@ function pda_encyclopedia_tab:InitPlugin()
 	end
 	
 	-- Fill each of the tables with their articles.
+	local unlocked_articles = xr_statistic.actor_statistic.guide_articles
 	for i = 1, #self.categories do
 		if (ini:section_exist(self.categories[i].section)) then
 			line_count = ini:line_count(self.categories[i].section) or 0
 			self.categories[i].articles = {}
 			for k = 0, line_count - 1 do
-				local junk1, section, junk2 = ini:r_line(self.categories[i].section, k, "", "")
-				local unlocked_articles = xr_statistic.actor_statistic.guide_articles
-				if (unlocked_articles and unlocked_articles[section] == nil and not has_alife_info("guide_cheated")) then
-					table.insert(self.locked, section)
+				local junk1, section, value = ini:r_line(self.categories[i].section, k, "", "")
+				-- Unlocked articles table must exist, and must not contain this article.
+				if (unlocked_articles and not unlocked_articles[section]) then
+					-- Guide cheat infoportion must not exist, and article must not have "unlocked" tag.
+					if (not has_alife_info("unlocked_guide") and not (value == "unlocked")) then
+						table.insert(self.locked, section)
+					end
 				end
 				table.insert(self.categories[i].articles, section)
+				
+				-- Keep any unlocked articles permanently unlocked.
+				-- When a counter is added to the interface this will make things simpler.
+				if (has_alife_info("unlocked_guide") or value == "unlocked") then
+					unlocked_articles[section] = true
+				end
 			end
 		else printf("Encyclopedia category \"" .. self.categories[i].section .. "\" does not exist.") end
 	end

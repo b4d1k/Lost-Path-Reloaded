@@ -1,7 +1,7 @@
 --[[------------------------------------------------------------------------------------------------
 Helicopter movement
 Андрущенко Иван
-
+-- NOTE: Needs rewritten to track enemy by ID, reference is BAD!
 --------------------------------------------------------------------------------------------------]]
 local state_move = 0
 ----------------------------------------------------------------------------------------------------
@@ -91,7 +91,7 @@ function heli_move:reset_scheme( loading )
 		self.was_callback                   = false
 		self._flag_to_wp_callback           = false
         self.heli_fire.enemy_               = self.a.enemy_
-        self.heli_fire.enemy                = nil
+        self.heli_fire.enemy_id             = nil
         self.heli_fire.flag_by_enemy        = true
         if self.a.fire_point then
 			local pat = patrol(self.a.fire_point)
@@ -212,15 +212,17 @@ function heli_move:iterate_nodes()
 		return 
 	end
 	
-	if (self.a.increment < 0 and self.a.path_index == 1 or self.a.increment > 0 and self.a.path_index == #self.a.nodes) then
-		local path_end = xr_logic.pick_section_from_condlist(db.actor, self.object, self.a.path_end)
-		--printf("path_end %s %s",self.a.path_index,path_end)
-		if (path_end == "loop") then 
-			self.a.path_index = 1
-		elseif (path_end == "reverse") then
-			self.a.increment = -self.a.increment
-		elseif (path_end and path_end ~= "nil") then
-			xr_logic.switch_to_section(self.object, db.storage[self.object:id()].ini, path_end)
+	if (self.a.path_end) then
+		if (self.a.increment < 0 and self.a.path_index == 1 or self.a.increment > 0 and self.a.path_index == #self.a.nodes) then
+			local path_end = xr_logic.pick_section_from_condlist(db.actor, self.object, self.a.path_end)
+			--printf("path_end %s %s",self.a.path_index,path_end)
+			if (path_end == "loop") then 
+				self.a.path_index = 1
+			elseif (path_end == "reverse") then
+				self.a.increment = -self.a.increment
+			elseif (path_end and path_end ~= "nil") then
+				xr_logic.switch_to_section(self.object, db.storage[self.object:id()].ini, path_end)
+			end
 		end
 	end
 	
@@ -428,7 +430,7 @@ function set_scheme( npc, ini, scheme, section, gulag_name)
     st.immortal     = ini:r_bool_ex(section, "immortal",false)
     st.mute         = ini:r_bool_ex(section, "mute",false)
 	
-	a.path_end = xr_logic.parse_condlist(npc, section, "path_end", ini:r_string_ex(section,"path_end") or "nil")
+	a.path_end = ini:r_string_to_condlist(section,"path_end")
 	
 	--st.combat:read_custom_data(ini,section)
 end

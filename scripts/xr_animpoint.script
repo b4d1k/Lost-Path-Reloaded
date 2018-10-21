@@ -61,14 +61,23 @@ function action_reach_animpoint:execute()
 	--self.object:set_desired_direction(self.st.animpoint.smart_direction)
 	self.object:set_path_type(game_object.level_path)
 
+	if (self.object:character_community() == "zombied") then
+		state_mgr.set_state(self.object,"walk")
+		return
+	end
+	
     --printf("%s animpoint position riched %s", npc:name(), npc:position():distance_to_sqr(self.vertex_position))
-
-    local reach_movement = xr_logic.pick_section_from_condlist(db.actor, nil, self.st.reach_movement)
-
+	local new_state = "walk"
+	if (self.st.reach_movement) then 
+		local reach_movement = xr_logic.pick_section_from_condlist(db.actor, nil, self.st.reach_movement)
+		if (reach_movement and reach_movement ~= "") then 
+			new_state = reach_movement
+		end
+	end
 	if (self.object:position():distance_to_sqr(self.st.animpoint.vertex_position) <= self.st.reach_distance) then
-		state_mgr.set_state(self.object, reach_movement, nil, nil, {look_position = self.st.animpoint.look_position}  )
+		state_mgr.set_state(self.object, new_state, nil, nil, {look_position = self.st.animpoint.look_position}  )
 	else
-		state_mgr.set_state(self.object, reach_movement)
+		state_mgr.set_state(self.object, new_state)
 	end
 end
 function action_reach_animpoint:finalize()
@@ -96,7 +105,11 @@ function action_animpoint:execute()
 --	printf("%s animpoint action %s", self.object:name(), tostring(self.st.animpoint:get_action()))
 --	state_mgr.set_state(self.object, self.st.animpoint:get_action(), nil, nil, nil,
 
-	state_mgr.set_state(self.object, self.st.animpoint:get_action(), nil, nil, {look_position = self.st.animpoint.look_position},{animation_position = self.st.animpoint.position, animation_direction = self.st.animpoint.smart_direction} )
+	if (self.object:character_community() == "zombied") then
+		state_mgr.set_state(self.object,"guard")
+	else
+		state_mgr.set_state(self.object, self.st.animpoint:get_action(), nil, nil, {look_position = self.st.animpoint.look_position},{animation_position = self.st.animpoint.position, animation_direction = self.st.animpoint.smart_direction} )
+	end
 end
 function action_animpoint:net_destroy(npc)
 	self.st.animpoint:stop()
@@ -179,6 +192,13 @@ function animpoint:calculate_position()
 
 	-- Также получаем дескриптор позиции, и формируем список доступных действий.
 	local description_name = smartcover:description()
+	
+	-- make them interchangable for variety
+	if (description_name == "animpoint_sit_ass" or description_name == "animpoint_sit_knee" or description_name == "animpoint_sit") then 
+		local r = math.random(1,100)
+		description_name = r > 66 and "animpoint_sit_ass" or r > 33 and "animpoint_sit_knee" or "animpoint_sit"
+	end  
+	
 	if xr_animpoint_predicates.associations[description_name] == nil then
 		if self.st.avail_animations == nil then
 			printf("Wrong animpoint smart_cover description %s, name %s", tostring(description_name), smartcover:name())
@@ -227,17 +247,19 @@ function animpoint:fill_approved_actions()
 
 	-- Если задан авеил анимейшнз, то мы игнорим ассоциации с нашим смарткавером.
 	if self.st.avail_animations ~= nil then
+		local t = self.st.approved_actions
 		-- animations are set from custom_data?
 		for k, v in pairs(self.st.avail_animations) do
-			table.insert(self.st.approved_actions, {predicate = function() return true end, name = v})
+			t[#t+1] = {predicate = function() return true end, name = v}
 		end
 	else
 		if self.avail_actions ~= nil then
+			local t = self.st.approved_actions
 			for k,v in pairs(self.avail_actions) do
 				-- Убираем те действия, которые не подходят по прекондишну
 				--printf("checking approved actions %s", self.npc_id)
 				if v.predicate(self.npc_id, is_in_camp)==true then
-					table.insert(self.st.approved_actions, v)
+					t[#t+1] = v
 				end
 			end
 		end
@@ -302,6 +324,7 @@ function animpoint:get_action()
 	return self.current_action
 end
 
+local tmp_actions
 function animpoint:update()
 	if not (self.vertex_position) then
 		return
@@ -310,7 +333,10 @@ function animpoint:update()
 		printf("Trying to use destroyed object!")
 		return
 	end
-		local tmp_actions = {}
+	
+	tmp_actions = iempty_table(tmp_actions)
+	local size_t = 0
+
 	local descr = self.st.description
 
 	if (self.camp == nil or self.st.use_camp ~= true) then
@@ -321,21 +347,23 @@ function animpoint:update()
 			end
 
 			for k,v in pairs(self.st.approved_actions) do
-				table.insert(tmp_actions, v.name)
+				size_t = size_t + 1
+				tmp_actions[size_t] = v.name
 			end
 		else
 			for k,v in pairs(self.st.avail_animations) do
-				table.insert(tmp_actions, v)
+				size_t = size_t + 1
+				tmp_actions[size_t] = v
 			end
 		end
 
-		self.current_action = tmp_actions[math.random(#tmp_actions)]
+		self.current_action = tmp_actions[math.random(size_t)]
 		return
 	end
 
 	local camp_action, is_director = self.camp:get_camp_action(self.npc_id)
 	local tbl = {}
-		if(is_director) then
+	if (is_director) then
 		--printf(" [%s] is director", self.npc_id)
 		tbl = assoc_tbl[camp_action].director
 		self.__dtimer = time_global()
@@ -344,6 +372,7 @@ function animpoint:update()
 		if (self.current_action and time_global() < self.__dtimer) then
 			return
 		end
+		self.__dtimer = nil
 		--printf(" [%s] is not director", self.npc_id)
 		tbl = assoc_tbl[camp_action].listener
 	end
@@ -357,17 +386,19 @@ function animpoint:update()
 		for i = 1, #tbl do
 			if(descr..tbl[i]==v.name) then
 				--printf("    approved %s", tostring(v.name))
-				table.insert(tmp_actions, v.name)
+				size_t = size_t + 1
+				tmp_actions[size_t] = v.name
 				found = true
 			end
 		end
 	end
 
 	if not found then
-		table.insert(tmp_actions, descr)
+		size_t = size_t + 1
+		tmp_actions[size_t] = descr
 	end
 
-	local rnd = math.random(#tmp_actions)
+	local rnd = math.random(size_t)
 	local action = tmp_actions[rnd]
 
 	--action - выбранный экшн из доступных
@@ -378,7 +409,7 @@ function animpoint:update()
 
 		if(action==descr.."_weapon") and (self.st.base_action==descr) then
 			table.remove(tmp_actions, rnd)
-			action = tmp_actions[math.random(#tmp_actions)]
+			action = tmp_actions[math.random(size_t-1)]
 		end
 	else
 		if(action==descr.."_weapon") then
@@ -411,7 +442,6 @@ function add_to_binder(npc, ini, scheme, section, storage)
 
 	local new_action = this.action_reach_animpoint(npc, "action_reach_animpoint", storage)
 	new_action:add_precondition(world_property(stalker_ids.property_alive, true))
-	new_action:add_precondition(world_property(stalker_ids.property_anomaly,false))
 	new_action:add_precondition(world_property(stalker_ids.property_enemy,false))
 	new_action:add_precondition(world_property(stalker_ids.property_danger,false))
 	new_action:add_precondition(world_property(xr_evaluators_id.animpoint_property + 1, true))
@@ -424,7 +454,6 @@ function add_to_binder(npc, ini, scheme, section, storage)
 
 	new_action = this.action_animpoint(npc, "action_animpoint", storage)
 	new_action:add_precondition(world_property(stalker_ids.property_alive, true))
-	new_action:add_precondition(world_property(stalker_ids.property_anomaly,false))
 	new_action:add_precondition(world_property(stalker_ids.property_enemy,false))
 	new_action:add_precondition(world_property(stalker_ids.property_danger,false))
 	new_action:add_precondition(world_property(xr_evaluators_id.animpoint_property + 1, true))
@@ -446,8 +475,8 @@ function set_scheme(npc, ini, scheme, section, gulag_name)
 	st.cover_name		= ini:r_string_ex(section,"cover_name") or "$script_id$_cover"
 	st.use_camp 		= ini:r_bool_ex(section,"use_camp",true)
 	st.reach_distance	= ini:r_float_ex(section,"reach_distance") or 0.8
-	st.reach_movement = xr_logic.parse_condlist(db.actor, "animpoint", "reach_movement", ini:r_string_ex(section,"reach_movement") or "walk")
-	st.reach_distance = st.reach_distance*st.reach_distance
+	st.reach_movement 	= ini:r_string_to_condlist(section,"reach_movement")
+	st.reach_distance 	= st.reach_distance*st.reach_distance
 
 	st.direction = ini:r_string_ex(section,"direction")
 	st.direction = st.direction and alun_utils.string_to_vector(st.direction)

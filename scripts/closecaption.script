@@ -201,7 +201,7 @@ function sound(_sound, showtime, sender, sender_faction, sender_id, delay_sound)
 									if delay_sound < 0 then delay_sound = -delay_sound - 501 end
 								else
 									local gt = time_global() + 500
-									table.insert(delayed_cc, {_sound, showtime, sender, sender_faction, sender_id, -delay_sound - 1, dt = gt})
+									delayed_cc[#delayed_cc+1] = {_sound, showtime, sender, sender_faction, sender_id, -delay_sound - 1, dt = gt}
 									RegisterScriptCallback("actor_on_update", on_actor_update_cc)
 									return true
 								end
@@ -438,24 +438,34 @@ local msgtypes = {"st_tip", "st_memo", "st_sending_msg", ""}
 function cc_display_radio(sender, sender_faction, sender_id, showtime, cc_text, delay_sound, cc_type)
 	local msg_type = msgtypes[-cc_type]
 	local texture, faction, name
-	if (type(sender) == "userdata" and IsStalker(sender) and sender:id() ~= 0) then
-		texture = sender:character_icon()
-		if sender:profile_name() ~= "actor" then
-			faction = game.translate_string(sender:character_community())
-		end
-		name = sender:character_name()
-	elseif type(sender) == "table" then 
-		texture = string.sub(sender[math.random(1, #sender)], 1)
-	end
+
 	if sender_faction then
 		faction = game.translate_string(sender_faction)
 	end
-	if sender_id then
+	
+	if type(sender_id) == "string" then
 		if sender_id == "!" then
 			name = sender_unidentified()
 		else
 			name = game.translate_string(sender_id)
+			if (name == sender_id) then -- no translation string
+				name = nil
+			end
 		end
+	end
+	
+	if (type(sender) == "userdata") then 
+		if (sender.clsid and IsStalker(sender) and sender:id() ~= 0) then
+			texture = sender:character_icon()
+			if sender:profile_name() ~= "actor" then
+				faction = game.translate_string(sender:character_community())
+			end
+			if not (name) then
+				name = sender:character_name()
+			end
+		end
+	elseif type(sender) == "table" then 
+		texture = string.sub(sender[math.random(1, #sender)], 1)
 	end
 
 	local news_caption = ""
@@ -480,7 +490,9 @@ function cc_display_radio(sender, sender_faction, sender_id, showtime, cc_text, 
 		news_caption = news_caption..":"
 	end
 	local clr = "%c[ui_2]"
-	db.actor:give_game_news(news_caption, clr .. cc_text, texture, delay_sound+500, showtime, 1)
+
+	db.actor:give_game_news(news_caption, clr .. cc_text, texture or "ui_iconsTotal_grouping", delay_sound+500, showtime, 1)
+
 	return true
 end
 

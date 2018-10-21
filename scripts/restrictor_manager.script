@@ -1,6 +1,4 @@
-
 class "Crestrictor_manager"
-
 function Crestrictor_manager:__init(obj)
   	self.object = obj
   	self.base_out_restrictions = {}
@@ -20,31 +18,22 @@ end
 -- STALKER restrictions
 ----------------------------------------------------------------------------------------------------------------------
 --' Данная функция вычитывает из логики набор рестрикторов, которые нужно проставить персонажу.
-function Crestrictor_manager:reset_restrictions(st, section)
-	--printf("reset restrictions obj=%s section=%s", self.object:name(), tostring(section))
 
+local restr_tbl -- scoped because it's used by all online npc frequently and would be Garbage Collector waste
+function Crestrictor_manager:reset_restrictions(st, section)
+	-- OUT RESTRICTIONS
 	local actual_ini = st.ini
-	
 	local out_restr_string = get_param_string(actual_ini:r_string_ex(section, "out_restr") or "", self.object)
-	
-	--' Вычитываем новые аут рестрикторы
 	local new_out_restr = utils.parse_names(out_restr_string)
-	
-	--' Узнаем про существующие аут рестрикторы
 	local old_out_restr = utils.parse_names(self.object:out_restrictions())
 
-	--[[
-	printf("old out_restrs table:")
-	print_table(old_out_restr)	
-	printf("new out_restrs table:")
-	print_table(new_out_restr)
-	]]--	
-
-	--' Проверяем появились ли новые рестрикторы.
-	local ins_restr = {}  --' Тут поместим рестрикторы, которые нужно добавить
-	local del_restr = {}  --' Тут поместим рестрикторы, которые нужно удалить
+	-- Remove old out restrictions
+	restr_tbl = iempty_table(restr_tbl)
+	local size_t = 0
+	local exist_rest
+	
 	for k,v in pairs(old_out_restr) do
-		local exist_rest = false
+		exist_rest = false
 		for kk,vv in pairs(new_out_restr) do
 			if v == vv then
 				exist_rest = true
@@ -52,11 +41,21 @@ function Crestrictor_manager:reset_restrictions(st, section)
 			end
 		end
 		if exist_rest == false and self.base_out_restrictions[v] ~= true then
-			table.insert(del_restr, v)
+			size_t = size_t + 1 
+			restr_tbl[size_t] = v
 		end
 	end
+	
+	for i=1,size_t do
+		self.object:remove_restrictions(restr_tbl[i],"")
+	end
+	
+	-- New out restrictions
+	restr_tbl = iempty_table(restr_tbl)
+	size_t = 0
+	
 	for k,v in pairs(new_out_restr) do
-		local exist_rest = false
+		exist_rest = false
 		for kk,vv in pairs(old_out_restr) do
 			if v == vv then
 				exist_rest = true
@@ -64,43 +63,26 @@ function Crestrictor_manager:reset_restrictions(st, section)
 			end
 		end
 		if exist_rest == false and v ~= "nil" then
-			table.insert(ins_restr, v)
+			size_t = size_t + 1 
+			restr_tbl[size_t] = v
 		end
 	end
 
-	--'Удаляем старые аут рестрикторы. апплаим новые.
-	for k,v in pairs(del_restr) do
-		--printf("old out_restr [%s] deleted", v)
-		self.object:remove_restrictions(v, "")
-	end
-	for k,v in pairs(ins_restr) do
-		--printf("new out_restr [%s] added", v)
-		self.object:add_restrictions(v, "")
+	for i=1,size_t do
+		self.object:add_restrictions(restr_tbl[i],"")
 	end
 
-	
-	
-	--' Вычитываем новые ИН рестрикторы
+	-- IN RESTRICTIONS
 	local in_restr_string = get_param_string(actual_ini:r_string_ex(section, "in_restr") or "", self.object)
-	
-	--' Вычитываем новые аут рестрикторы
 	local new_in_restr = utils.parse_names(in_restr_string)
-
-	--' Узнаем про существующие ИН рестрикторы
 	local old_in_restr = utils.parse_names(self.object:in_restrictions())
 
-	--[[
-	printf("old in_restrs table:")
-	print_table(old_in_restr)	
-	printf("new in_restrs table:")
-	print_table(new_in_restr)
-	]]--	
-
-	--' Проверяем появились ли новые рестрикторы.
-	ins_restr = {}  --' Тут поместим рестрикторы, которые нужно добавить
-	del_restr = {}  --' Тут поместим рестрикторы, которые нужно удалить
+	-- Remove old in restrictions
+	restr_tbl = iempty_table(restr_tbl)
+	size_t = 0
+	
 	for k,v in pairs(old_in_restr) do
-		local exist_rest = false
+		exist_rest = false
 		for kk,vv in pairs(new_in_restr) do
 			if v == vv then
 				exist_rest = true
@@ -108,11 +90,21 @@ function Crestrictor_manager:reset_restrictions(st, section)
 			end
 		end
 		if exist_rest == false and self.base_in_restrictions[v] ~= true then
-			table.insert(del_restr, v)
+			size_t = size_t + 1
+			restr_tbl[size_t] = v
 		end
 	end
+	
+	for i=1,size_t do
+		self.object:remove_restrictions("",restr_tbl[i])
+	end
+	
+	-- New in restrictions
+	restr_tbl = iempty_table(restr_tbl)
+	size_t = 0
+	
 	for k,v in pairs(new_in_restr) do
-		local exist_rest = false
+		exist_rest = false
 		for kk,vv in pairs(old_in_restr) do
 			if v == vv then
 				exist_rest = true
@@ -120,20 +112,14 @@ function Crestrictor_manager:reset_restrictions(st, section)
 			end
 		end
 		if exist_rest == false and v ~= "nil" then
-			table.insert(ins_restr, v)
+			size_t = size_t + 1
+			restr_tbl[size_t] = v
 		end
 	end
 
-	--'Удаляем старые аут рестрикторы. апплаим новые.
-	for k,v in pairs(del_restr) do
-		--printf("old in_restr [%s] deleted", v)
-		self.object:remove_restrictions("", v)
+	for i=1,size_t do
+		self.object:add_restrictions("",restr_tbl[i])
 	end
-	for k,v in pairs(ins_restr) do
-		--printf("new in_restr [%s] added", v)
-		self.object:add_restrictions("", v)
-	end
-	 
 end
 
 

@@ -25,6 +25,8 @@ local intercepts = {
 	-- _g.script
 	on_before_item_use			= {},
 	actor_on_before_hit			= {},
+	inventory_box_can_take		= {},
+	npc_on_before_hit			= {},
 	
 	-- actor_menu_inventory.script 
 	CUIActorMenu_OnItemDropped		= {},
@@ -49,7 +51,7 @@ local intercepts = {
 	npc_on_net_spawn			= {},
 	npc_on_net_destroy 			= {},
 	npc_on_update				= {},
-	npc_on_hit_callback			= {},
+	npc_on_hit_callback			= {},		-- kind reminder, remember it is still called when they are dead with bone_index == "from_death_callback"
 	npc_on_death_callback		= {},
 	npc_on_item_take_from_box	= {},
 	
@@ -72,6 +74,9 @@ local intercepts = {
 	se_actor_on_unregister		= {},
 	se_actor_on_STATE_Write		= {},
 	se_actor_on_STATE_Read		= {},
+	
+	-- dxr_achievements
+	on_achievement_earned		= {},
 
 	-- xr_corpse_detection.script
 	npc_on_get_all_from_corpse 	= {},
@@ -79,6 +84,8 @@ local intercepts = {
 	-- sim_board.script
 	squad_on_npc_creation		= {},
 	fill_start_position			= {},
+	squad_on_enter_smart		= {},
+	squad_on_leave_smart		= {},
 	
 	-- sim_squad_scripted.script
 	squad_on_npc_death			= {},
@@ -142,6 +149,7 @@ local intercepts = {
 	monster_on_update				= {},
 	monster_on_hit_callback			= {},
 	monster_on_net_spawn			= {},
+	monster_on_net_destroy 			= {},
 	monster_on_death_callback		= {},
 	monster_on_actor_use_callback   = {},
 
@@ -155,6 +163,8 @@ local intercepts = {
 	-- Custom saving feature (uses marshal)
 	save_state						= {},
 	load_state						= {},
+	
+	actor_menu_mode_changed			= {},
 	
 	TrdWndOpened					= {},
 	TrdWndClosed					= {}
@@ -197,7 +207,7 @@ end
 --------------------------------------------------------------------------------------------------------------------
 function on_game_start()
 	local ignore = { 
-		["_G.script"] = true,
+		["_g.script"] = true,
 		["class_registrator.script"] = true,
 		["game_registrator.script"] = true,
 		["ui_registrator.script"] = true,
@@ -211,6 +221,7 @@ function on_game_start()
 		["rx_gl.script"] = true
 	}
 	local t = {}
+	local size_t = 0
 	local f	= getFS()
 	local flist = f:file_list_open_ex("$game_scripts$",bit_or(FS.FS_ListFiles,FS.FS_RootOnly),"*.script")
 	local f_cnt = flist:Size()
@@ -221,7 +232,8 @@ function on_game_start()
 		if (file:Size() > 0 and ignore[file_name] ~= true) then
 			file_name = file_name:sub(0,file_name:len()-7)
 			if (_G[file_name] and _G[file_name].on_game_start) then
-				table.insert(t,file_name) -- load all scripts first
+				size_t = size_t + 1 
+				t[size_t] = file_name -- load all scripts first
 			end
 		end
 	end

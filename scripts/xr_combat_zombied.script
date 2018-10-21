@@ -149,7 +149,7 @@ end
 
 -- вызывается как для action_zombie_shoot, так и для action_zombie_go_to_danger
 function action_zombie_shoot:hit_callback( obj, amount, local_direction, who, bone_index )
-	if who == nil then
+	if who == nil or bone_index == "from_death_callback" then
 		return
 	end
 	if self.st.cur_act == 1 then
@@ -231,7 +231,7 @@ end
 
 -- вызывается как для action_zombie_shoot, так и для action_zombie_go_to_danger
 function action_zombie_go_to_danger:hit_callback( obj, amount, local_direction, who, bone_index )
-	if who == nil then
+	if who == nil or bone_index == "from_death_callback" then
 		return
 	end
 

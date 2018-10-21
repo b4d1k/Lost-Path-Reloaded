@@ -76,10 +76,18 @@ function CPsiStormManager:start(manual)
 
 	diff_sec = math.ceil(game.get_game_time():diffSec(self.inited_time)/level.get_time_factor())
 	local level_name = level.name()
-	if(level_name == "l11_hospital" or level_weathers.valid_levels[level_name] ~= true or atmosfear_options.config:r_value("atmosfear_current_parameters","opt_enable_psi_storm",2,1)==0) then
+	
+	if(level_weathers.valid_levels[level_name] ~= true or atmosfear_options.config:r_value("atmosfear_current_parameters","opt_enable_psi_storm",2,1)==0) then
 		self:skip_psi_storm()
 		return
 	end
+	
+	-- Deserted Hospital has nowhere to hide (almost all the map is inside anyway).
+	if (level_name == "l11_hospital" or has_alife_info("bar_arena_fight")) then
+		self:skip_psi_storm()
+		return
+	end
+	
 	if(diff_sec+6>self.psi_storm_duration) then
 		self:skip_psi_storm()
 	else
@@ -124,6 +132,9 @@ function CPsiStormManager:new_psi_storm_time()
 end
 
 function CPsiStormManager:skip_psi_storm()
+	if (self.started) then 
+		xr_statistic.inc_counter("storms")
+	end
 	if not (self.inited_time) then 
 		self.inited_time = game.get_game_time()
 	end
@@ -143,7 +154,7 @@ function CPsiStormManager:skip_psi_storm()
 	self.psi_storm_task_sect 	= ""
 	self.task_given 		= nil
 	prev_sec				= 0
-	xr_statistic.inc_counter("storms")
+
 	level.set_time_factor(self.game_time_factor)
 end
 
@@ -220,7 +231,8 @@ function CPsiStormManager:update()
 	if not (self.first_update) then 
 		self.first_update = true
 		local level_name = level.name()
-		if (level_name == "l11_hospital" or level_weathers.valid_levels[level_name] ~= true) then 
+		if (level_name == "l11_hospital" or has_alife_info("bar_arena_fight")
+		or level_weathers.valid_levels[level_name] ~= true) then
 			if (self.started) then 
 				self:finish()
 			else
@@ -373,7 +385,7 @@ function CPsiStormManager:vortex_actor_hit(vortex)
 			h.power = surge_manager.SurgeManager:hit_power(hit_power, h.type)
 		end		
 		h.impulse = 0
-		h.direction = vector():set(0,0,1)
+		h.direction = VEC_Z
 		h.draftsman = db.actor
 		
 		db.actor:hit(h)
@@ -392,7 +404,7 @@ function CPsiStormManager:vortex_actor_hit(vortex)
 			h.power = surge_manager.SurgeManager:hit_power(hit_power, h.type)
 		end
 		h.impulse = 0
-		h.direction = vector():set(0,0,1)
+		h.direction = VEC_Z
 		h.draftsman = db.actor
 		db.actor:hit(h)
 		level.remove_pp_effector(667)
@@ -419,7 +431,7 @@ function CPsiStormManager:kill_obj_at_pos(pos)
 		["zombied"]					= true
 	}
 	for k,v in pairs(board.squads) do
-		local squad = v
+		local squad = alife_object(k)
 		if (squad:clsid() == clsid.online_offline_group_s and surge_manager.can_destroy_squad(squad,immuned_to_surge_squads,sim,gg)) then
 			local squad_npcs = surge_manager.get_squad_members(squad.id)
 			local fate = atmosfear_options.config:r_value("atmosfear_current_parameters","opt_psi_storm_fate",0,"kill")
@@ -516,7 +528,7 @@ function CPsiStormManager:kill_crows_at_pos(pos)
 	h.type = hit.fire_wound
 	h.power = 1.0
 	h.impulse = 0
-	h.direction = vector():set(0,0,1)
+	h.direction = VEC_Z
 	h.draftsman = db.actor
 	for k,v in pairs(bind_crow.crow_storage) do
 		local obj = alife_object(v)
@@ -711,6 +723,7 @@ function is_actor_immune()
 		return true
 	end
 	
+	-- Marked by the Zone.
 	if (utils.load_var(db.actor,"surge_immuned",false) == true) then 
 		return true 
 	end
@@ -722,7 +735,7 @@ function is_actor_immune()
 	end
 	-- 'Radiotherapy' achievement has been unlocked.
 	if (has_alife_info("achieved_radiotherapy")) then
-		if ((math.random(1,100)/100) < 0.25) then
+		if (math.random(1,100) < 25) then
 			return true
 		end
 	end

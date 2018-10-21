@@ -50,7 +50,7 @@ function action_teleport:update(delta)
 					local dir = patrol(v.look):point(0):sub(patrol(v.point):point(0))
 					db.actor:set_actor_direction(-dir:getH())
 					local snd_obj = sound_object("affects\\tinnitus3a")
-					snd_obj:play_no_feedback(db.actor, sound_object.s2d, 0, vector(), 1.0)					
+					snd_obj:play_no_feedback(db.actor, sound_object.s2d, 0, VEC_ZERO, 1.0)					
 					break
 				end
 			end
@@ -89,7 +89,7 @@ function set_scheme(obj, ini, scheme, section, gulag_name)
 		if t.point == "none" or t.look == "none" then
 			break
 		end
-		table.insert(st.points, t)
+		st.points[#st.points+1] = t
 	end
 	if #st.points == 0 then
 		abort("Wrong point nums in sr_teleport [%s]", tostring(section))

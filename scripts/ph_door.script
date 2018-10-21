@@ -237,8 +237,9 @@ end
 
 function action_door:try_switch()
 	--printf("_bp: action_door: object '%s': try_switch  on_use=%s", self.object:name(),self.st.on_use)
-	if self.st.on_use then		
-		if xr_logic.switch_to_section(self.object, self.st.ini,xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.on_use.condlist)) then
+	if self.st.on_use then
+		local result = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.on_use.condlist)
+		if (result and xr_logic.switch_to_section(self.object, self.st.ini, result)) then
 			return true
 		end
 	end
@@ -259,7 +260,9 @@ function action_door:hit_callback(obj, amount, local_direction, who, bone_index)
 	--printf("DOOR: hit_callback: obj='%s', amount=%d, who='%s', bone='%s'", obj and obj:name(), amount, who and who:name(), bone_index)
 	if self.st.hit_on_bone[bone_index] ~= nil then
 		local section = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.hit_on_bone[bone_index].state)
-		xr_logic.switch_to_section(obj, self.st.ini, section)
+		if (section) then
+			xr_logic.switch_to_section(obj, self.st.ini, section)
+		end
 		return
 	end
 end

@@ -67,90 +67,10 @@ function activate_feature()
 	last_warning 			= 3					--// # of hourly warnings before passing out
 	die_chance 				= 0.01				--// chance of dying if actor passes out
 	--last_chk, pwr_chk		= 0, 0				--// hourly and power update counters
-
-	items = {
-	--	Vanilla.
-	--	Alcoholic drinks.
-		vodka				= 3,
-		vodka_script		= 3,
-		
-	--	Energy drinks.
-		energy_drink		= -4,
-		
-	--	Medical supplies.
-		antirad				= 2,
---		bandage				= 1,
-		drug_anabiotic		= 1,
-		drug_antidot		= 1,
-		drug_coagulant		= 1,
-		drug_psy_blockade	= 1,
-		drug_radioprotector	= 1,
-		medkit				= 2,
-		medkit_army			= 3,
-		medkit_scientic 	= 4,
-		medkit_script		= 2,
-		
-	-----------------------------
-		
-	--	"Items Addon" by 2C. (Compatibility)
-	--	Alcoholic drinks.
-		beer				= 2,
-		medo				= 3,
-		
-	--	Energy drinks.
-		mbk					= -4,
-		wild_drink			= -2,
-		
-	--	Medical supplies
-		drug_cat_eye		= 2,
-		drug_engine			= -4,	-- LSD
---		bio_bandage			= 2,
-		medkit_elite		= 4,
-		psy_complex			= 2,
-		
-	-----------------------------
-
-	--	"Item Soup" by /sg/. (Compatibility)
-	--	Alcoholic drinks.
-		vodka_1				= 3,
-		vodka_2				= 3,
-		vodka_3				= 3,
-		vodka_4				= 3,
-		beer_1				= 2,
-		beer_2				= 2,
-		beer_can_1			= 2,
-		beer_can_2			= 2,
-		beer_large_1		= 3,
-		beer_large_2		= 3,
-		
-	--	Energy drinks.
-		cocacola			= -2,
-		guru				= -3,
-		redbull				= -4,
-		
-	--	Medical supplies.
-		amphetamines_1		= -3,
-		amphetamines_2		= -3,
-		amphetamines_3	 	= -3,
-		amphetamines_4		= -3,
---		bandage_israeli		= 1,
-		diazepam			= 2,
-		
-	--	Tobacco products.
-		cigarettes_1		= 1,
-		cigarettes_2		= 1,
-		cigarettes_3		= 1,
-		cigarettes_russian	= 1,
-		cuban				= 2,
-		lucky				= 1,
-		marlboro			= 1
-	}	
 	
 	RegisterScriptCallback("actor_on_item_use",actor_on_item_use)
-	if (USE_MARSHAL) then
-		RegisterScriptCallback("save_state",save_state)
-		RegisterScriptCallback("load_state",load_state)
-	end
+	RegisterScriptCallback("save_state",save_state)
+
 	AddUniqueCall(main_loop)
 end 
 
@@ -170,9 +90,20 @@ function deactivate_feature()
 end 
 
 function on_game_start()
+	items = {}
+	local ini = ini_file("plugins\\sleep_deprivation.ltx")
+	if (ini and ini:section_exist("items")) then
+		local line_count = ini:line_count("items") or 0
+		for i = 0, line_count - 1 do
+			local junk1, section, value = ini:r_line("items", i, "", "")
+			items[section] = value
+		end
+	end
+	
 	if (axr_main.config:r_value("mm_options","enable_sleep_deprived",1,false) == false) then
 		return 
 	end
+	
 	local function actor_on_first_update()
 		activate_feature()
 		if last_sleep > start_blur then
@@ -186,6 +117,7 @@ function on_game_start()
 		end
 	end
 	RegisterScriptCallback("actor_on_first_update",actor_on_first_update)
+	RegisterScriptCallback("load_state",load_state)
 end
 
 ----// add to bind_stalker or bind_stalker_ext save/load if used. //--
@@ -209,30 +141,31 @@ end
 function save_state(m_data)
 	if (USE_MARSHAL) then
 		m_data.sleep_deprived = m_data.sleep_deprived or {}
-		m_data.sleep_deprived["last_sleep"] = last_sleep
-		m_data.sleep_deprived["caff"] = caff_chk
+		m_data.sleep_deprived.last_sleep = last_sleep
+		m_data.sleep_deprived.caff = caff_chk
+		m_data.sleep_deprived.last_chk = last_chk
 	end
 end
 
 function load_state(m_data)
-	if (USE_MARSHAL) then
-		last_sleep = m_data.sleep_deprived and m_data.sleep_deprived.last_sleep or 0
-		caff_chk = m_data.sleep_deprived and m_data.sleep_deprived.caff or 0
+	if (USE_MARSHAL and m_data.sleep_deprived) then
+		last_sleep = m_data.sleep_deprived.last_sleep or 0
+		caff_chk = m_data.sleep_deprived.caff or 0
+		last_chk = m_data.sleep_deprived.last_chk or game.get_game_time()
+		m_data.sleep_deprived = nil
 	end
 end
 
 function actor_on_item_use(item)
-	for i,j in pairs(items) do
-		if item:section() == i then
---			if i == "energy_drink" then
-			if j < 0 then
-				caff_chk = caff_chk + 1
-				if caff_chk > caff_max then break end
-			end
-			last_sleep = last_sleep + j
-			test_blur()
-			break
+	local section = item:section()
+	local value = items and tonumber(items[section]) or 0
+	if items[section] then
+		if value < 0 then
+			caff_chk = caff_chk + 1
+			if caff_chk > caff_max then return end
 		end
+		last_sleep = last_sleep + value
+		test_blur()
 	end
 end
 

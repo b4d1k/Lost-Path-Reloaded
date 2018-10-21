@@ -39,14 +39,7 @@ function action_remark_activity:activate_scheme()
 	self.anim_scheduled = true
 
 	-- Определим нужно ли нам отыгрывать отдельно звук после поворота.
-	if self.st.snd_anim_sync == false and
-		 self.st.snd ~= nil
-	then
-		self.snd_scheduled = true
-	else
-		self.snd_scheduled = false
-	end
-
+	self.snd_scheduled = self.st.snd_anim_sync == false and self.st.snd ~= nil or false
 	self.snd_started = false
 
 	-- Задаем стартовое состояние
@@ -76,24 +69,30 @@ end
 function action_remark_activity:time_callback()
 --printf("TIME CALLBACK CALLED")
 	self.state = state_sound
-	--self:update() --wtf?
+	self:update()
 end
 function action_remark_activity:update()
 	--' 1. Мы должны повернуться на объект.
 	--printf("REMARK: [%s] state[%s]", self.object:name(), self.state)
 
 	if self.state == state_initial then
+		local new_state = "wait"
+		if (self.st.anm) then
+			local anm = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.anm)
+			if (anm and anm ~= "") then 
+				new_state = anm
+			end
+		end
+			
 		local cb = { obj = self, func = self.time_callback }
 		local target = self:get_target()
 		if target == nil then
-			local anm = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.anm)
-			state_mgr.set_state(self.object, anm, cb, 0)
+			state_mgr.set_state(self.object, new_state, cb, 0)
 			self.state = state_animation
 			return
 		end
 
-		local anm = xr_logic.pick_section_from_condlist(db.actor, self.object, self.st.anm)
-		state_mgr.set_state(self.object, anm, cb, 0, target)
+		state_mgr.set_state(self.object, new_state, cb, 0, target)
 		self.state = state_animation
 
 	--' Ожидание колбека от стейтменеджера
@@ -155,7 +154,7 @@ end
 --remark binder
 ----------------------------------------------------------------------------------------------------------------------
 function add_to_binder(npc, ini, scheme, section, storage)
-	printf("DEBUG: add_to_binder [%s]: scheme='%s', section='%s'", npc:name(), scheme, section)
+	--printf("DEBUG: add_to_binder [%s]: scheme='%s', section='%s'", npc:name(), scheme, section)
 	local operators	= {}
 	local properties  = {}
 
@@ -174,7 +173,6 @@ function add_to_binder(npc, ini, scheme, section, storage)
 	new_action:add_precondition(world_property(stalker_ids.property_alive, true))
 	new_action:add_precondition(world_property(stalker_ids.property_danger,false))
 	new_action:add_precondition(world_property(stalker_ids.property_enemy, false))
-	new_action:add_precondition(world_property(stalker_ids.property_anomaly,false))
 	new_action:add_precondition(world_property(properties["need_remark"], true))
 	modules.add_common_precondition(scheme,new_action)
 	new_action:add_effect(world_property(properties["need_remark"], false))
@@ -190,16 +188,16 @@ end
 
 -- Включение схемы
 function set_scheme(npc, ini, scheme, section, gulag_name)
-	printf("DEBUG: set_scheme: scheme='%s', section='%s'", scheme, section)
+	--printf("DEBUG: set_scheme: scheme='%s', section='%s'", scheme, section)
 	local st = xr_logic.assign_storage_and_bind(npc, ini, scheme, section)
-	printf("DEBUG: set_scheme: storage assigned")
+	--printf("DEBUG: set_scheme: storage assigned")
 
 	st.logic     = xr_logic.cfg_get_switch_conditions(ini, section, npc)
 
 	st.snd_anim_sync = ini:r_bool_ex(section,"snd_anim_sync") or false
 
 	st.snd			= ini:r_string_ex(section,"snd")
-	st.anm			= xr_logic.parse_condlist(npc, "anim", "anim", ini:r_string_ex(section,"anim") or "wait")
+	st.anm			= ini:r_string_to_condlist(section,"anim")
 	st.tips_id		= ini:r_string_ex(section,"tips")
 	if st.tips_id then
 		st.sender	= ini:r_string_ex(section,"tips_sender")

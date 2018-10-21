@@ -7,87 +7,110 @@ function get_inv_name(section)
 end 
 
 -- Prints a formated lua table to print_table.txt for debugging purposes
-function print_table(tbl,header,format_only)
-	local txt = header and ("-- " .. tostring(header) .. "\n{\n\n") or "{\n\n"
-	local depth = 1
-
+function print_table(node,header,format_only)
+	-- to make output beautiful
 	local function tab(amt)
 		local str = ""
-		for i=1,amt, 1 do
+		for i=1,amt do
 			str = str .. "\t"
 		end
 		return str
 	end
 
-	local function table_to_string(tbl)
-		local size = 0
-		for k,v in pairs(tbl) do
-			size = size + 1
+	local cache, stack = {},{}
+	local depth = 1
+	local output_str = header and ("-- " .. tostring(header) .. "\n{\n") or "{\n"
+	local output = {}
+	local size_t = 0
+	local size_stack = 0 
+	while true do
+		local size = table.size(node)
+		local cur_index = 1
+		for k,v in pairs(node) do
+			if (cache[node] == nil) or (cur_index >= cache[node]) then
+				if (string.find(output_str,"}",output_str:len())) then
+					output_str = output_str .. ",\n"
+				elseif not (string.find(output_str,"\n",output_str:len())) then
+					output_str = output_str .. "\n"
+				end
+				
+				size_t = size_t + 1
+				output[size_t] = output_str
+				output_str = ""
+
+				local key
+				if (type(k) == "number" or type(k) == "boolean") then
+					key = "["..tostring(k).."]"
+				else
+					key = "['"..tostring(k).."']"
+				end
+
+				if (type(v) == "number" or type(v) == "boolean") then
+					output_str = output_str .. tab(depth) .. key .. " = "..tostring(v)
+				elseif (type(v) == "table") then
+					output_str = output_str .. tab(depth) .. key .. " = {\n"
+					size_stack = size_stack + 1
+					stack[size_stack] = node
+					size_stack = size_stack + 1
+					stack[size_stack] = v
+					cache[node] = cur_index+1
+					break
+				elseif (type(v) == "userdata") then
+					if (v.diffSec) then
+						local Y, M, D, h, m, s, ms = 0,0,0,0,0,0,0
+						Y, M, D, h, m, s, ms = v:get(Y, M, D, h, m, s, ms)
+						output_str = strformat("%s%s%s = { Y=%s, M=%s, D=%s, h=%s, m=%s, s=%s, ms=%s } ",output_str,tab(depth),key,Y, M, D, h, m, s, ms)
+					else
+						output_str = output_str .. tab(depth) .. key .. " = userdata"
+					end
+				else
+					output_str = output_str .. tab(depth) .. key .. " = '"..tostring(v).."'"
+				end
+
+				if (cur_index == size) then
+					output_str = output_str .. "\n" .. tab(depth-1) .. "}"
+				else
+					output_str = output_str .. ","
+				end
+			else
+				-- close the table
+				if (cur_index == size) then
+					output_str = output_str .. "\n" .. tab(depth-1) .. "}"
+				end
+			end
+
+			cur_index = cur_index + 1
+		end
+		
+		if (size == 0) then
+			output_str = output_str .. "\n" .. tab(depth-1) .. "}"
 		end
 
-		local key
-		local i = 1
-
-		for k,v in pairs(tbl) do
-			if (type(k) == "number") then
-				key = "[" .. k .. "]"
-			elseif (type(k) == "function" or type(k) == "string" or type(k) == "boolean" or type(k) == "table") then
-				key = "[\""..tostring(k) .. "\"]"
-			else 
-				key = "[____unknown_type]"
-			end
-
-			if (type(v) == "table") then
-				txt = txt .. tab(depth) .. key .. " =\n"..tab(depth).."{\n"
-				depth = depth + 1
-				
-				if (depth < 4) then
-					table_to_string(v)
-				end 
-				
-				depth = depth - 1
-				txt = txt .. tab(depth) .. "}"
-			elseif (type(v) == "number" or type(v) == "boolean") then
-				txt = txt .. tab(depth) .. key .. " = " .. tostring(v)
-			elseif (type(v) == "userdata") then
-				if (v.diffSec) then 
-					local Y, M, D, h, m, s, ms = 0,0,0,0,0,0,0
-					Y, M, D, h, m, s, ms = v:get(Y, M, D, h, m, s, ms)
-					txt = strformat("%s%s%s = { Y=%s, M=%s, D=%s, h=%s, m=%s, s=%s, ms=%s } ",txt,tab(depth),key,Y, M, D, h, m, s, ms)
-				else
-					txt = txt .. tab(depth) .. key .. " = \"userdata\""
-				end
-			elseif (type(v) == "function") then
-				txt = txt .. tab(depth) .. key .. " = \"" .. tostring(v) .. "\""
-			elseif (type(v) == "string") then 
-				txt = txt .. tab(depth) .. key .. " = '" .. v .. "'"
-			else 
-				txt = txt .. tab(depth) .. key
-			end
-
-			if (i == size) then
-				txt = txt .. "\n"
-			else
-				txt = txt .. ",\n"
-			end
-
-			i = i + 1
+		if (size_stack > 0) then
+			node = stack[size_stack]
+			stack[size_stack] = nil
+			size_stack = size_stack - 1
+			depth = cache[node] == nil and depth + 1 or depth - 1
+		else
+			break
 		end
 	end
+   
+	size_t = size_t + 1
+	output[size_t] = output_str
 
-	table_to_string(tbl)
-
-	txt = txt .. "\n}"
-
-	if (format_only) then
-		return txt 
+	output_str = table.concat(output)
+	
+   	if (format_only) then
+		return output_str
 	end
 	
 	local file = io.open("print_table.txt","a+")
-	file:write(txt.."\n\n")
+	file:write(output_str.."\n\n")
 	file:close()
 	printf("Table written to print_table.txt")
 end
+
 
 function valid_vertex(npc,vid)
 	return vid and vid < 4294967295 and npc:accessible(vid) and vid
@@ -134,44 +157,15 @@ function read_from_ini(ini,section,line,var_type,default,caller)
 end
 
 function trim(s)
-	return string.gsub(s, "^%s*(.-)%s*$", "%1")
+	return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
 end
-
---[[
-function string:split(pat)
-	pat = pat or '%s+'
-  local st, g = 1, self:gmatch("()("..pat..")")
-  local function getter(self, segs, seps, sep, cap1, ...)
-    st = sep and seps + #sep
-    return self:sub(segs, (seps or 0) - 1), cap1 or sep, ...
-  end
-  local function splitter(self)
-    if st then return getter(self, st, g()) end
-  end
-  return splitter, self
-end
-
-function str_explode(str,pattern)
-	local t = {}
-	if (type(str) ~= "string") then return end
-	for word, pat, start in str:split(pattern) do
-		t[#t+1] = trim(word)
-		if (start and pat == pattern) then
-		    t[#t+1] = trim(str:sub(start))
-			break
-		end
-	end
-	return t
-end
---]]
 
 function parse_ini_section_to_array(ini,section)
 	local tmp=nil
 	if ini and ini:section_exist(section) then
 		tmp={}
-		local result, id, value = nil, nil, nil
 		for a=0,ini:line_count(section)-1 do
-			result, id, value = ini:r_line(section,a,"","")
+			local result, id, value = ini:r_line(section,a,"","")
 			if id~=nil and trim(id)~="" and trim(id)~=nil then
 				tmp[trim(id)]=trim(value)
 			end
@@ -180,30 +174,15 @@ function parse_ini_section_to_array(ini,section)
 	return tmp
 end
 
-function str_explode(str,div,dont_trim)
-	if not (dont_trim) then 
-		trim(str)
-	end 
-	local t={}
-	local cpt = string.find (str, div, 1, true)
-	local a
-	if cpt then
-		repeat
-			if not dont_trim then
-				a = trim(string.sub(str, 1, cpt-1))
-				table.insert( t, a )
-			else
-				table.insert( t, string.sub(str, 1, cpt-1) )
-			end
-			str = string.sub( str, cpt+string.len(div) )
-			cpt = string.find (str, div, 1, true)
-		until cpt==nil
+function str_explode(str,sep,plain)
+	if not (sep ~= "" and string.find(str,sep,1,plain)) then
+		return { str }
 	end
-	if not dont_trim then
-		a = trim(str)
-		table.insert(t, a)
-	else
-		table.insert(t, str)
+	local t = {}
+	local size = 0
+	for s in str:gsplit(sep,plain) do 
+		size = size + 1
+		t[size] = trim(s)
 	end
 	return t
 end
@@ -295,64 +274,21 @@ function parse_list(ini,key,val,convert)
 		error(strformat("alun_utils.parse_list ini is nil for key=%s val=%s",key,val))
 	end
 	local str = ini:r_string_ex(key,val)
-	local t = str and str ~= "" and str_explode(str,",")
-	if not (t) then
-		return {}
-	end
+	local t = str and str ~= "" and str_explode(str,",") or {}
 	if (convert and #t > 0) then
 		local l = {}
-		for i,v in ipairs(t) do
-			l[v] = true
+		for i=1,#t do
+			l[t[i]] = true
 		end
 		return l
 	end
 	return t
 end
 
-function eval_condlist(npc, condlist, p)
-	return xr_logic.pick_section_from_condlist(db.actor,npc, condlist, p)
-end
-
-function parse_condlist(str)
-	if not (str) then
-		printf("alun_utils.parse_condlist: Error no source string")
-		return
-	end
-
-	local src = str_explode(str,",")
-	local t = {}
-	local a,b,infop_check_lst,infop_set_lst,remainings,new_sect
-	for i=1,#src do
-		a, b, infop_check_lst = string.find(src[i], "{%s*(.*)%s*}")
-		if (infop_check_lst) then
-			remainings = string.sub(src[i], 1, a - 1) .. string.sub(src[i], b + 1)
-		else
-			remainings = src[i]
-		end
-
-		a, b, infop_set_lst = string.find(remainings, "%%%s*(.*)%s*%%")
-		if (infop_set_lst) then
-			new_sect = string.sub(remainings, 1, a - 1) .. string.sub(remainings, b + 1)
-		else
-			new_sect = remainings
-		end
-
-		new_sect = trim(new_sect)
-
-		t[i] = {}
-		t[i].infop_check = {}
-		t[i].infop_set = {}
-
-		t[i].section = new_sect
-		xr_logic.parse_infop(t[i].infop_check, infop_check_lst)
-		xr_logic.parse_infop(t[i].infop_set, infop_set_lst)
-	end
-	return t
-end
-
 function collect_sections(ini,sections)
 	local r,p = {},{}
-	for k,v in ipairs(sections) do
+	for k=1,#sections do
+		local v = sections[k]
 		if ini:section_exist(v) then
 			local n = ini:line_count(v)
 			if n > 0 then
@@ -364,8 +300,6 @@ function collect_sections(ini,sections)
 				end
 			end
 			p[k] = n
-		else
-			p[k] = 0
 		end
 	end
 	return r,p
@@ -380,7 +314,7 @@ function get_rank_list()
 	ranks = {}
 	for i,rn in ipairs(tmp) do
 		if not tonumber(rn) then
-			table.insert(ranks,rn)
+			ranks[#ranks+1] = rn
 		end
 	end
 	return ranks
@@ -410,7 +344,7 @@ function get_communities_list()
 	communities = {}
 	for i,cn in ipairs(tmp) do
 		if not tonumber(cn) then
-			table.insert(communities,cn)
+			communities[#communities+1] = cn
 		end
 	end
 	return communities
@@ -456,7 +390,7 @@ function nearest_object(s,offline)
 	local nearest
 	local min_dist
 	local is_match
-	for i=1, 65535 do
+	for i=1, 65534 do
 		local obj = alife_object(i)
 		if (obj) then
 			is_match = false
@@ -632,24 +566,9 @@ function get_sound(snd)
 	end
 end
 
-function safe_bone_pos(npc,bone)
-    if not (npc) then
-		printf("safe_bone_pos: npc is nil!")
-		return
-    end
-	
-	local pos
-	if (IsStalker(npc)) then
-		pos = npc:bone_position(bone or "bip01_spine")
-		pos = pos and vector():set(pos) or nil
-	end
-
-	if not (pos) then
-		pos = vector():set(npc:position())
-		pos.y = pos.y + 0.5
-	end
-
-	return pos
+function safe_bone_pos(obj,bone)
+	local bone_id = obj:get_bone_id(bone)
+	return obj:bone_position(bone_id == 65535 and "" or bone)
 end
 
 function is_level_changing()
@@ -676,16 +595,6 @@ function switch_offline(id)
 	end
 end
 
--------------------
-function angle_diff(a1, a2)
-  local b1=a1:normalize()
-  local b2=a2:normalize()
-  local dotp=b1:dotproduct(b2)
-  return utils.rad2deg(math.acos(dotp))
-end
-
-
-
 -------------------------------------------------------- DEBUG FUNCTION -------------------------------------------------
 function debug_nearest(npc,msg,...)
 	local dbg = xrs_debug_tools.get_debug_npc()
@@ -693,27 +602,6 @@ function debug_nearest(npc,msg,...)
 	if (id and dbg and id == dbg:id()) then
 		printf("nearest=%s |"..msg,npc:name(),...)
 	end
-end 
-
-function printf(msg,...)
-	if not (msg) then return end
-	local fmt = tostring(msg)
-
-	if (select('#',...) >= 1) then
-		local i = 0
-		local p = {...}
-		local function sr(a)
-			i = i + 1
-			if (type(p[i]) == 'userdata') then
-				return 'userdata'
-			end
-			return tostring(p[i])
-		end
-		fmt = string.gsub(fmt,"%%s",sr)
-	end
-	get_console():execute("load ~#debug msg:"..fmt)
-	--get_console():execute("flush")
-	--debug_write(fmt,true)
 end
 
 local debug_file
@@ -726,6 +614,7 @@ function debug_write(output,trace)
 
 	if (log) then 
 		log(output)
+		--get_console():execute("flush")
 	end 
 end
 
@@ -755,7 +644,7 @@ end
 
 function string_to_vector(str)
 	if (str == nil or str == "") then 
-		return vector()
+		return VEC_ZERO
 	end
 	local t = alun_utils.str_explode(str,",")
 	return vector():set(tonumber(t[1] or 0) or 0,tonumber(t[2] or 0) or 0,tonumber(t[3] or 0) or 0)
@@ -890,7 +779,7 @@ function collect_section(ini,section,keytable)
 					end
 					_t[id] = val or true
 				else
-					table.insert(_t,id)
+					_t[#_t+1] = id
 				end
 			end
 		end
@@ -923,15 +812,15 @@ function in_los(npc,friend,be)
 		end	
 	end
 
-	local pos = npc:bone_position("bip01_spine")
+	local pos = alun_utils.safe_bone_pos(npc,"bip01_spine")
 	local friend_pos = alun_utils.safe_bone_pos(friend,"bip01_spine")
 	local friend_dist = pos:distance_to(friend_pos)
 	local be_pos = alun_utils.safe_bone_pos(be,"bip01_spine")
-	local dir_aim = vector():sub(be_pos,pos)
+	local dir_aim = vec_sub(be_pos,pos)
 	local be_dist = npc:position():distance_to(be:position())
 
 	if (friend_dist < be_dist) then
-		local dir_friend = vector():sub(friend_pos,pos)
+		local dir_friend = vec_sub(friend_pos,pos)
 		local vec_be,vec_who = vector():set(dir_aim):set_length(friend_dist),dir_friend:set_length(friend_dist)
 		local mywho = friend_dist < 1.5 and vec_who:similar(vec_be,0) or vec_who:similar(vec_be,1.3)
 		if (mywho == 1) then
@@ -971,11 +860,11 @@ function in_crosshair()
 					local p = db.actor:position()
 					local d = device().cam_dir
 
-					local vpc = vector():sub( c, p )
+					local vpc = vec_sub( c, p )
 					
 					if vpc:dotproduct( d ) > 0 then	 -- facing right direction
 						
-						local vec_c = vector():sub( c, p )
+						local vec_c = vec_sub( c, p )
 						vec_c = vector_rotate_y( vpc, 7 ) -- correct a little bit
 
 						local vec_p = d
@@ -990,9 +879,9 @@ function in_crosshair()
 						
 						local pc_temp = temp2
 													
-						local pc = vector():add( p, pc_temp )
+						local pc = vec_add( p, pc_temp )
 															
-						local ppp = vector():sub( c, pc )
+						local ppp = vec_sub( c, pc )
 
 						if ppp:magnitude() < 0.5 then
 							return npc
@@ -1033,10 +922,10 @@ function npc_in_cover(npc)
 --				rx_ai.printf("npc_in_cover[%s]:add enemy[%s]",npc:character_name(),obj:name())
 				if (IsStalker(obj) and npc:relation(obj) == game_object.enemy and obj:alive()) then
 					if (obj:id() ~= 0 or not obj:wounded()) then 
-						table.insert(enemies,obj)
+						enemies[#enemies+1] = obj
 					end
 				elseif (IsMonster(obj) and npc:relation(obj) == game_object.enemy and obj:alive()) then
-					table.insert(enemies,obj)
+					enemies[#enemies+1] = obj
 				end
 				tt[id] = true
 			end
@@ -1048,10 +937,10 @@ function npc_in_cover(npc)
 				if obj then
 					if (IsStalker(obj) and npc:relation(obj) == game_object.enemy and obj:alive()) then
 						if (obj:id() ~= 0 or not obj:wounded()) then 
-							table.insert(enemies,obj)
+							enemies[#enemies+1] = obj
 						end
 					elseif (IsMonster(obj) and npc:relation(obj) == game_object.enemy and obj:alive()) then
-						table.insert(enemies,obj)
+						enemies[#enemies+1] = obj
 					end
 				end
 			end
@@ -1059,7 +948,7 @@ function npc_in_cover(npc)
 		for i,enemy in ipairs(enemies) do
 			local dist = npc:position():distance_to_sqr(enemy:position())
 			local seez = enemy:see(npc) or npc:see(enemy)
-			local dir = vector():sub(enemy:position(),npc:position())
+			local dir = vec_sub(enemy:position(),npc:position())
 			local cover
 			if npc:body_state() == move.crouch then
 				 cover = level.low_cover_in_direction(npc:level_vertex_id(),dir)
@@ -1298,7 +1187,8 @@ function cfg_file:SetValue(sec,key,val)
 		if not (self.insert[sec]) then 
 			self.insert[sec] = {}
 		end
-		table.insert(self.insert[sec],key)
+		local t = self.insert[sec]
+		t[#t+1] = key
 	end
 
 	self.root[sec][key] = val == nil and "" or tostring(val)
@@ -1332,7 +1222,7 @@ function cfg_file:SaveExt()
 		local padding = {}
 		local l = string.len(s)
 		for i=1,n-l do 
-			table.insert(padding," ")
+			padding[#padding+1] = " "
 		end 
 		return s .. table.concat(padding)
 	end
@@ -1340,7 +1230,6 @@ function cfg_file:SaveExt()
 	for ln in io.lines(self.fname) do
 		ln = trim(ln)
 		if (startsWith(ln,"[")) then
-			sec = string.match(trim_comment(ln),"%[(.-)%]")
 			-- inject new fields that previously didn't exist
 			if (sec and self.root[sec] and self.insert[sec]) then
 				for i=1,#self.insert[sec] do
@@ -1351,6 +1240,7 @@ function cfg_file:SaveExt()
 				end
 			end
 			
+			sec = string.match(trim_comment(ln),"%[(.-)%]")
 			str = str .. ln .. "\n"
 		elseif (sec and self.root[sec]) then
 			key = trim(trim_comment(string.match(ln,"(.-)=") or ln))
@@ -1386,12 +1276,12 @@ function cfg_file:Save()
 	_s.__order = {}
 	
 	for section,tbl in pairs(self.root) do
-		table.insert(_s.__order,section)
+		_s.__order[#_s.__order+1] = section
 		if not (_s[section]) then 
 			_s[section] = {}
 		end
 		for k,v in pairs(tbl) do 
-			table.insert(_s[section],k)
+			_s[section][#_s[section]+1] = k
 		end
 	end
 	
@@ -1805,9 +1695,9 @@ function table2CTime(t)
 end
 
 function find_random_cover(npc,pos,min_rad,max_rad)
-	local rand = math.random
+	local rnd = math.random
 	local base_point = npc:level_vertex_id()
-	local base_vertex_id = level.vertex_in_direction(base_point, vector_rotate_y(utils.vector_copy_by_val(npc:direction()),rand(0,360)), rand(min_rad,max_rad))
+	local base_vertex_id = level.vertex_in_direction(base_point, vector_rotate_y(utils.vector_copy_by_val(npc:direction()),rnd(0,360)), rnd(min_rad,max_rad))
 	local base_position = level.vertex_position(base_vertex_id)
 
 	local cover, tcover
@@ -1843,17 +1733,17 @@ function find_close_cover(npc,base_position,pos,cover_dist,mn,mx)
 end
 
 function find_cover_in_rand_direction(npc,base_point,pos)
-	local rand = math.random
+	local rnd = math.random
 	
 	local dir = npc:direction()
-	local rand_dir = rand(1,6)
+	local rand_dir = rnd(1,6)
 	local base_vertex_id, base_position, cover, cover_dist
 	for i=rand_dir,6 do
 		base_vertex_id = level.vertex_in_direction(base_point,dir,i*60)
 		base_position = level.vertex_position(base_vertex_id)
 
 		cover = nil
-		cover_dist = rand(1,30)
+		cover_dist = rnd(1,30)
 		while not cover and cover_dist > 0 do
 			cover = npc:best_cover(base_position,pos,cover_dist,1,30)
 			cover_dist = cover_dist - 1
@@ -1893,7 +1783,7 @@ function try_go_aside_object(npc,friend,pos,old_vid)
 	end
 
 	--alun_utils.debug_nearest(npc,"try_to_strafe")
-	local _dir = vector():sub(mypos,pos)
+	local _dir = vec_sub(mypos,pos)
 	local dir = {}
 	dir[1] = vector_rotate_y(utils.vector_copy_by_val(_dir),-90)
 	dir[2] = vector_rotate_y(utils.vector_copy_by_val(_dir),90)
@@ -1959,7 +1849,7 @@ function lmove(npc,vid,old_vid)
 	end
 	
 	if not (npc:accessible(vid)) then
-		local vtemp = vector()
+		local vtemp = vector():set(0,0,0)
 		vid, vtemp = npc:accessible_nearest(vid and level.vertex_position(vid) or npc:position(), vtemp )
 	end
 
@@ -1984,14 +1874,14 @@ function in_los(npc,be,friend)
 	end
 
 	local be_pos = alun_utils.safe_bone_pos(be,"bip01_spine")
-	local pos = npc:bone_position("bip01_spine")
+	local pos = alun_utils.safe_bone_pos(npc,"bip01_spine")
 	local friend_pos = alun_utils.safe_bone_pos(friend,"bip01_spine")
 	local friend_dist = pos:distance_to(friend_pos)
-	local dir_aim = vector():sub(be_pos,pos)
+	local dir_aim = vec_sub(be_pos,pos)
 	local be_dist = npc:position():distance_to(be:position())
 
 	if (friend_dist < be_dist) then
-		local dir_friend = vector():sub(friend_pos,pos)
+		local dir_friend = vec_sub(friend_pos,pos)
 		local vec_be,vec_who = vector():set(dir_aim):set_length(friend_dist),dir_friend:set_length(friend_dist)
 		local mywho = friend_dist < 1.5 and vec_who:similar(vec_be,0) or vec_who:similar(vec_be,1.3)
 		if (mywho == 1) then
@@ -2030,15 +1920,15 @@ function friends_on_fire_line(npc,be,st)
 		local friend = id  and id ~= sid and db.storage[id] and db.storage[id].object
 	
 		if (friend and friend:alive() and npc:relation(friend) < game_object.enemy) then
-			local pos = npc:bone_position("bip01_spine")
+			local pos = alun_utils.safe_bone_pos(npc,"bip01_spine")
 			local friend_pos = alun_utils.safe_bone_pos(friend,"bip01_spine")
 			local friend_dist = pos:distance_to(friend_pos)
 			local be_pos = alun_utils.safe_bone_pos(be,"bip01_spine")
-			local dir_aim = vector():sub(be_pos,pos)
+			local dir_aim = vec_sub(be_pos,pos)
 			local be_dist = npc:position():distance_to(be:position())
 
 			if (friend_dist < be_dist) then
-				local dir_friend = vector():sub(friend_pos,pos)
+				local dir_friend = vec_sub(friend_pos,pos)
 				local vec_be,vec_who = vector():set(dir_aim):set_length(friend_dist),dir_friend:set_length(friend_dist)
 				local mywho = friend_dist < 1.5 and vec_who:similar(vec_be,0) or vec_who:similar(vec_be,1.3)
 				if (mywho == 1) then
@@ -2088,7 +1978,7 @@ function BezierPath:Interpolate(segmentPoints,scale)
 			local p1 = segmentPoints[i]
 			local p2 = segmentPoints[i+1]
 			
-			local tangent = vector():sub(p2,p1)
+			local tangent = vec_sub(p2,p1)
 			local q1 = p1:add(tangent:mul(scale))
 			
 			table.insert(self.controlPoints,p1)
@@ -2097,7 +1987,7 @@ function BezierPath:Interpolate(segmentPoints,scale)
 			local p0 = segmentPoints[i]
 			local p1 = segmentPoints[i+1]
 			
-			local tangent = vector():sub(p1,p0)
+			local tangent = vec_sub(p1,p0)
 			local q0 = p1:add(tangent:mul(scale))
 			
 			table.insert(self.controlPoints,q0)
@@ -2107,10 +1997,10 @@ function BezierPath:Interpolate(segmentPoints,scale)
 			local p1 = segmentPoints[i]
 			local p2 = segmentPoints[i+1]
 			
-			local tangent = vector():sub(p2,p0):normalize()
+			local tangent = vec_sub(p2,p0):normalize()
 			
-			local q0 = vector():sub(p1,tangent:mul(scale):mul( vector():sub(p1,p0):magnitude() ))
-			local q1 = vector():add(p1,tangent:mul(scale):mul( vector():sub(p2,p1):magnitude() ))
+			local q0 = vec_sub(p1,tangent:mul(scale):mul( vec_sub(p1,p0):magnitude() ))
+			local q1 = vec_add(p1,tangent:mul(scale):mul( vec_sub(p2,p1):magnitude() ))
 			
 			table.insert(self.controlPoints,q0)
 			table.insert(self.controlPoints,p1)
@@ -2132,8 +2022,8 @@ function BezierPath:SamplePoints(sourcePoints,minSqrDistance,maxSqrDistance,scal
 	local potentialSamplePoint = sourcePoints[2]
 	
 	for i=3, #sourcePoints, 1 do 
-		if ( sqrMagnitude(vector():sub(potentialSamplePoint,sourcePoints[i])) > minSqrDistance ) then 
-			if ( sqrMagnitude(vector():sub(samplePoints[#samplePoints],sourcePoints[i])) > maxSqrDistance ) then 
+		if ( sqrMagnitude(vec_sub(potentialSamplePoint,sourcePoints[i])) > minSqrDistance ) then 
+			if ( sqrMagnitude(vec_sub(samplePoints[#samplePoints],sourcePoints[i])) > maxSqrDistance ) then 
 				table.insert(samplePoints,potentialSamplePoint)
 			end		
 		end 
@@ -2145,12 +2035,12 @@ function BezierPath:SamplePoints(sourcePoints,minSqrDistance,maxSqrDistance,scal
 	samplePoints[#samplePoints] = nil 
 	
 	local p0 = samplePoints[#samplePoints]
-	local tangent = vector():sub(p0,potentialSamplePoint):normalize()
+	local tangent = vec_sub(p0,potentialSamplePoint):normalize()
 	
-	local d2 = vector():sub(potentialSamplePoint,p1):magnitude()
-	local d1 = vector():sub(p1,p0):magnitude()
+	local d2 = vec_sub(potentialSamplePoint,p1):magnitude()
+	local d1 = vec_sub(p1,p0):magnitude()
 	
-	p1 = vector():add(p1, tangent:mul((d1-d2/2)))
+	p1 = vec_add(p1, tangent:mul((d1-d2/2)))
 	
 	table.insert(samplePoints,p1)
 	table.insert(samplePoints,potentialSamplePoint)
@@ -2223,15 +2113,15 @@ function BezierPath:FindDrawingPoints(curveIndex,t0,t1,pointList,insertionIndex)
 	local left = CalculateBezierPoint(curveIndex, t0)
 	local right = CalculateBezierPoint(curveIndex, t1)
 	
-	if ( sqrMagnitude(vector():sub(left,right)) < self.MINIMUM_SQR_DISTANCE ) then 
+	if ( sqrMagnitude(vec_sub(left,right)) < self.MINIMUM_SQR_DISTANCE ) then 
 		return 0
 	end
 	
 	local tMid = (t0+t1)/2
 	local mid = CalculateBezierPoint(curveIndex,tMid)
 	
-	local leftDirection = vector():sub(left,mid):normalize()
-	local rightDirection = vector():sub(right,mid):normalize()
+	local leftDirection = vec_sub(left,mid):normalize()
+	local rightDirection = vec_sub(right,mid):normalize()
 	
 	if (leftDirection:dotproduct(rightDirection) > self.DIVISION_THRESHOLD or math.abs(tMid - 0.5) < 0.0001) then 
 		local pointsAddedCount = 0
@@ -2279,44 +2169,5 @@ function vec_intersects_line(a,b,c)
 		elseif (within(a.y,c.y,b.y)) then
 			return vec_collinear(a,b,c)
 		end
-	end
-end 
-
---/----------------------------------------------------------------------------
---/ Sandbox ( http://www.amk-team.ru/forum/index.php?showtopic=6458#entry258260 )
---/----------------------------------------------------------------------------
-function sandbox(file_name, function_name, ...)
-	local status, result = pcall(sandbox_exec, file_name, function_name, ...)
-	if status == false then
-		printf("(%s:sandbox) call failed, result = [%s]", self_name, result)
-		return
-	else
-		return result
-	end
-end
-
---/ execute script in sandbox
-function sandbox_exec(file_name, function_name, ...)
-	if not (file_name) then 
-		return
-	end 
-	
-	if not _G[file_name] then 
-		printf("script %s is not found", file_name) 
-		return
-	end 
-	
-	local result = assert(loadfile(getFS():update_path('$game_scripts$', '')..file_name..'.script'))
-	if type(result) == "function" then
-		if function_name then
-			result()
-			local f = loadstring("return "..function_name)
-			f(...)
-		else
-			result()
-		end
-	else
-		printf("(%s:sandbox) exec failed. function is not available: result = [%s]", self_name, type(result))
-		return
 	end
 end

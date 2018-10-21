@@ -198,6 +198,7 @@ function npc_trade_buy_sell(npc)
 
 	local bw_ammos = bw and alun_utils.parse_list(system_ini(),bw,"ammo_class",true)
 	local buy_sell_items = {}
+	local size_t = 0
 	local buy_sell,total_cost
 	for sec,v in pairs(valid_items) do
 		buy_sell = ini:r_string_ex("buy_sell",sec)
@@ -213,7 +214,8 @@ function npc_trade_buy_sell(npc)
 					-- only buy enough to reach restock goals (param 3)
 					for i=item_list[sec],tonumber(buy_sell[3]) do
 						if (money >= total_cost) then
-							table.insert(buy_sell_items,sec)
+							size_t = size_t + 1
+							buy_sell_items[size_t] = sec
 							sim:create(sec,npc:position(),0,0,npc:id())
 							npc:transfer_money(total_cost,seller)
 							--printf("%s bought %s for %s",npc:name(),sec,total_cost)
@@ -224,7 +226,8 @@ function npc_trade_buy_sell(npc)
 					-- only buy enough to reach restock goals (param 3)
 					for i=1,tonumber(buy_sell[3]) do
 						if (money >= total_cost) then
-							table.insert(buy_sell_items,sec)
+							size_t = size_t + 1
+							buy_sell_items[size_t] = sec
 							sim:create(sec,npc:position(),0,0,npc:id())
 							npc:transfer_money(total_cost,seller)
 							printf("%s bought %s for %s",npc:name(),sec,total_cost)

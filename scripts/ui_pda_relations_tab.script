@@ -40,7 +40,9 @@ function pda_relations_tab:__init() super()
 	self:InitControls()
 end
 
-function pda_relations_tab:__finalize() end
+function pda_relations_tab:__finalize() 
+	SINGLETON = nil
+end
 
 function pda_relations_tab:InitControls()
 	self:SetWndRect(Frect():set(0, 0, 1024, 768))
@@ -104,13 +106,7 @@ function pda_relations_tab:InitControls()
 	self:AddCallback("list_companion",ui_events.LIST_ITEM_CLICKED,self.OnSelectCompanionList,self)
 	
 	self.auto_chk = xml:InitCheck("auto_check",self)
-	self.auto_chk:SetCheck(false)
-	
-	for row=1,4 do
-		local row_form = ui_companion_row(self,row,xml)
-		row_form:SetWndSize(vector2():set(740,140))
-		self.companion_listbox:AddExistingItem(row_form)
-	end
+	self.auto_chk:SetCheck(true)
 	
 	-- Hint Window
 	self.hint_wnd = xml:InitFrame("hint_wnd:background",self)
@@ -134,7 +130,7 @@ function pda_relations_tab:Update()
 	if self.auto_chk:GetCheck() then
 		local tg = time_global()
 		if self._tmr < tg then
-			self._tmr = tg + 2000
+			self._tmr = tg + 2500
 			self:autoupdate()
 		end
 	end
@@ -146,7 +142,7 @@ function pda_relations_tab:Update()
 	end
 
 	if not (self.disabled) then
-		for i=1, 24 do -- should be row*col from ui_companion_row
+		for i=1, #self.companion_info do
 			if (self.companion_info[i].icon_wnd:IsShown()) then 
 				local pos = GetCursorPosition()
 				local rect = Frect():set(0,0,0,0)
@@ -167,17 +163,26 @@ end
 function pda_relations_tab:autoupdate()
 	local id_to_code = {}
 	local clist = axr_companions.list_actor_squad_by_id()
-	for i=1,24 do -- should be row*col from ui_companion_row
+	
+	local row = 1
+	self.companion_listbox:RemoveAll()
+	self.companion_listbox:AddExistingItem(ui_companion_row(self, row, nil))
+	
+	for i=1,(clist and #clist or 0) do
 		local se_obj = clist[i] and alife_object(clist[i])
 		if (se_obj and IsStalker(nil,se_obj:clsid()) and se_obj:alive()) then
+			if i > 6 and math.mod(i - 1, 6) == 0 then
+				row = row + 1
+				self.companion_listbox:AddExistingItem(ui_companion_row(self, row, nil))
+			end
 			local full_name = se_obj:character_name()
-			local name = string.gsub(full_name,"Junior","Jr.")
-			name = string.gsub(name,"Senior","Sr.")
-			name = string.gsub(name,"Master ","M")
-			name = string.gsub(name,"Private","PVT")
-			name = string.gsub(name,"Sergeant","SGT")
-			name = string.gsub(name,"Lieutenant","LT")
-			name = string.gsub(name,"Captain","CPT")
+			local name = string.gsub(full_name, "Junior", "Jr.")
+			name = string.gsub(name, "Senior", "Snr.")
+			name = string.gsub(name, "Master ", "M. ")
+			name = string.gsub(name, "Private", "Pvt.")
+			name = string.gsub(name, "Sergeant", "Sgt.")
+			name = string.gsub(name, "Lieutenant", "Lt.")
+			name = string.gsub(name, "Captain", "Cpt.")
 			
 			local name = string.len(name) <= 22 and name or string.sub(name, 0, 19) .. "..."
 			self.companion_info[i].id = se_obj.id 
@@ -207,10 +212,7 @@ function pda_relations_tab:autoupdate()
 			
 			-- Set color code
 			if not (id_to_code[se_obj.group_id]) then 
-				local n = 1
-				for k,v in pairs(id_to_code) do 
-					n = n + 1
-				end
+				local n = table.size(id_to_code)+1
 				id_to_code[se_obj.group_id] = self.color_codes[n] or self.color_codes[1]
 			end
 			self.companion_info[i].leader_wnd:SetTextureColor(id_to_code[se_obj.group_id])
@@ -318,7 +320,7 @@ function pda_relations_tab:Reset()
 	for i=1, #self.list do
 		for k=0, #self.list do
 			local comm = self.list[k] or db.actor:character_community()
-			local r_val = relation_registry.community_relation(comm, self.list[i])
+			local r_val = self.list[k] and relation_registry.community_relation(comm, self.list[i]) or (relation_registry.community_goodwill(self.list[i], 0))
 			if r_val >= game_relations.FRIENDS then
 				self.relations[i][k]:SetTextColor(GetARGB(255, 1, 255, 1))
 				self.relations[i][k]:SetText(game.translate_string("st_goodwill_friendly"))
@@ -443,8 +445,11 @@ function pda_relations_tab:CreateContextMenu(npc,id)
 	
 	action_1__1 = function()
 		if not (utils.se_obj_load_var(se_obj.id,se_obj:name(),"companion_cannot_dismiss")) then
-			npc:use(db.actor)
-			--npc:start_trade(db.actor)
+			if (db.actor:position():distance_to_sqr(se_obj.position) <= 625) then
+				npc:use(db.actor)
+			else 
+				self:SetMsg(game.translate_string("st_pda_cant_trade_dist"),3)
+			end
 		else 
 			self:SetMsg(game.translate_string("st_pda_cant_trade"),3)
 		end
@@ -721,6 +726,7 @@ end
 class "ui_companion_row" (CUIListBoxItem)
 function ui_companion_row:__init(owner,row,xml) super(owner,row,xml)
 	self:GetTextItem():SetText("")
+	self:SetWndSize(vector2():set(740,140))
 
 	local is_widescreen = utils.is_widescreen()
 	local x = is_widescreen and 20 or 35
@@ -745,11 +751,13 @@ function ui_companion_row:__init(owner,row,xml) super(owner,row,xml)
 		owner.companion_info[n].icon_wnd:SetStretchTexture(true)
 		owner.companion_info[n].icon_wnd:SetWndSize(vector2():set(64,64))
 		owner.companion_info[n].icon_wnd:SetWndPos(vector2():set(x,y))
+		owner.companion_info[n].icon_wnd:Show(false)
 		
 		owner.companion_info[n].leader_wnd:InitTexture("ui_minimap_squad_leader")
 		owner.companion_info[n].leader_wnd:SetStretchTexture(true)
 		owner.companion_info[n].leader_wnd:SetWndSize(vector2():set(is_widescreen and 8 or 10,10))
 		owner.companion_info[n].leader_wnd:SetWndPos(vector2():set(x,y))
+		owner.companion_info[n].leader_wnd:Show(false)
 
 		owner.companion_info[n].name_wnd:SetFont(GetFontLetterica18Russian())
 		owner.companion_info[n].name_wnd:SetWndSize(vector2():set(120,22))

@@ -308,8 +308,8 @@ function af_options_dialog:InitControls()
 	self:Register				(btn, "btn_event_options")
 	btn = xml:Init3tButton		("main_dialog:btn_moon_options", self.dialog)
 	self:Register				(btn, "btn_moon_options")
-	btn = xml:Init3tButton		("main_dialog:btn_default_options", self.dialog)
-	self:Register				(btn, "btn_default_options")
+	-- btn = xml:Init3tButton		("main_dialog:btn_default_options", self.dialog)
+	-- self:Register				(btn, "btn_default_options")
 
 	self.dlg_event				= af_opt_event()
 	self.dlg_event:InitControls	(0,0, xml, self)
@@ -329,11 +329,11 @@ function af_options_dialog:InitControls()
 	self.dialog:AttachChild		(self.dlg_moon)
 	xml:InitWindow				("tab_size", 0, self.dlg_moon)
 
-	self.dlg_default			= af_opt_default()
-	self.dlg_default:InitControls	(0,0, xml, self)
-	self.dlg_default:Show			(false)
-	self.dialog:AttachChild		(self.dlg_default)
-	xml:InitWindow				("tab_size", 0, self.dlg_default)
+	-- self.dlg_default			= af_opt_default()
+	-- self.dlg_default:InitControls	(0,0, xml, self)
+	-- self.dlg_default:Show			(false)
+	-- self.dialog:AttachChild		(self.dlg_default)
+	-- xml:InitWindow				("tab_size", 0, self.dlg_default)
 
 	self.message_box_save					= CUIMessageBoxEx()
 	self:Register							(self.message_box_save, "message_box_save")
@@ -590,8 +590,8 @@ function af_options_dialog:InitCallBacks()
 	self:AddCallback("radio_jupiter_period_bad_length",		ui_events.TAB_CHANGED,		self.SetLengthPresetToCustom,		self)
 	self:AddCallback("radio_pripyat_period_good_length",	ui_events.TAB_CHANGED,		self.SetLengthPresetToCustom,		self)
 	self:AddCallback("radio_pripyat_period_bad_length",		ui_events.TAB_CHANGED,		self.SetLengthPresetToCustom,		self)
-	self:AddCallback("btn_load_color_balance",				ui_events.BUTTON_CLICKED,	self.OnBtnLoadColorBalance,		self)
-	self:AddCallback("btn_load_default_settings",			ui_events.BUTTON_CLICKED,	self.OnBtnLoadDefaultSettings,		self)
+	--self:AddCallback("btn_load_color_balance",				ui_events.BUTTON_CLICKED,	self.OnBtnLoadColorBalance,		self)
+	--self:AddCallback("btn_load_default_settings",			ui_events.BUTTON_CLICKED,	self.OnBtnLoadDefaultSettings,		self)
 	self:AddCallback("message_box_user",     				ui_events.MESSAGE_BOX_YES_CLICKED,		self.OnMsgUserYes,						self)
 	self:AddCallback("message_box_load_default",     		ui_events.MESSAGE_BOX_YES_CLICKED,		self.OnMsgLoadDefaultYes,						self)
 end
@@ -604,28 +604,28 @@ function af_options_dialog:OnBtnWeatherOptions()
 	self.dlg_weather:Show		(true)
 	self.dlg_event:Show			(false)
 	self.dlg_moon:Show			(false)
-	self.dlg_default:Show		(false)
+	--self.dlg_default:Show		(false)
 end
 
 function af_options_dialog:OnBtnEventOptions()
 	self.dlg_weather:Show		(false)
 	self.dlg_event:Show			(true)
 	self.dlg_moon:Show			(false)
-	self.dlg_default:Show		(false)
+	--self.dlg_default:Show		(false)
 end
 
 function af_options_dialog:OnBtnMoonOptions()
 	self.dlg_weather:Show		(false)
 	self.dlg_event:Show			(false)
 	self.dlg_moon:Show			(true)
-	self.dlg_default:Show		(false)
+	--self.dlg_default:Show		(false)
 end
 
 function af_options_dialog:OnBtnDefaultOptions()
 	self.dlg_weather:Show		(false)
 	self.dlg_event:Show			(false)
 	self.dlg_moon:Show			(false)
-	self.dlg_default:Show		(true)
+	--self.dlg_default:Show		(true)
 end
 
 function af_options_dialog:OnBtnLoadColorBalance()
@@ -649,7 +649,7 @@ end
 
 function af_options_dialog:OnMsgLoadDefaultYes()
 	self:SetDefaultValues()
-	self.dlg_default:Show(false)
+	--self.dlg_default:Show(false)
 	self.dlg_weather:Show(true)
 	self.message_box_load_default_done:InitMessageBox("message_box_ok")
 	self.message_box_load_default_done:SetText("st_msg_load_default_settings_done")
@@ -658,7 +658,7 @@ end
 
 function af_options_dialog:OnWeatherBalancePresets()
 	local selected = self:GetComboValue("weather_balance_presets")
-	local parameters = config:collect_section("atmosfear_preset_"..selected)
+	local parameters = self.default_settings:collect_section("atmosfear_preset_"..selected)
 	if parameters~=nil then
 		for option, name in pairs(parameters) do
 			self:SetComboValue(option,name)
@@ -668,7 +668,7 @@ end
 
 function af_options_dialog:OnWeatherLengthPresets()
 	local selected = self:GetComboValue("weather_length_presets")
-	local parameters = config:collect_section("atmosfear_preset_"..selected)
+	local parameters = self.default_settings:collect_section("atmosfear_preset_"..selected)
 	if parameters~=nil then
 		for option, name in pairs(parameters) do
 			self:SetRadioValue(option,name)
@@ -691,8 +691,11 @@ function af_options_dialog:OnBtnAccept()
 	for level,v in pairs(level_weathers.valid_levels) do
 		self:SetComboOption(level.."_period_good",false)
 		self:SetComboOption(level.."_period_bad",false)
-
-		if (not update_period) and (config:r_value("atmosfear_current_parameters",level.."_period_good_length") ~= tonumber(self:GetRadioValue(level.."_period_good_length")) or config:r_value("atmosfear_current_parameters",level.."_period_bad_length") ~= tonumber(self:GetRadioValue(level.."_period_bad_length"))) then
+		
+		self:SetRadioOption(level.."_period_good_length",false)
+		self:SetRadioOption(level.."_period_bad_length",false)
+		
+		if (not update_period) and (config:r_value("atmosfear_current_parameters",level.."_period_good_length") ~= self:GetRadioValue(level.."_period_good_length") or config:r_value("atmosfear_current_parameters",level.."_period_bad_length") ~= self:GetRadioValue(level.."_period_bad_length")) then
 			update_period = true
 		end
 	end
@@ -749,7 +752,7 @@ function af_options_dialog:OnBtnAccept()
 	self.dlg_weather:Show		(false)
 	self.dlg_event:Show			(false)
 	self.dlg_moon:Show			(false)
-	self.dlg_default:Show		(false)
+	--self.dlg_default:Show		(false)
 	self.owner:ShowDialog(true)
 	self:HideDialog()
 	self.owner:Show(true)
@@ -764,7 +767,7 @@ function af_options_dialog:OnBtnCancel()
 	self.dlg_weather:Show		(false)
 	self.dlg_event:Show			(false)
 	self.dlg_moon:Show			(false)
-	self.dlg_default:Show		(false)
+	--self.dlg_default:Show		(false)
 	self.owner:ShowDialog(true)
 	self:HideDialog()
 	self.owner:Show(true)
@@ -782,7 +785,7 @@ function af_options_dialog:OnKeyboard(dik, keyboard_action)
 				self.dlg_weather:Show		(false)
 				self.dlg_event:Show			(false)
 				self.dlg_moon:Show			(false)
-				self.dlg_default:Show		(false)
+				--self.dlg_default:Show		(false)
 				self.owner:ShowDialog(true)
 				self:HideDialog()
 				self.owner:Show(true)
@@ -925,9 +928,7 @@ function af_opt_weather:InitControls(x, y, xml, handler)
 		aspectRatio = 0.8
 	end
 	
-	local k = 0
 	for level_name,v in pairs(level_weathers.valid_levels) do
-		k = k + 1
 		_st = xml:InitStatic("weather_dialog:templ_item", nil)
 		_el=xml:InitStatic("weather_dialog:div_1", _st)
 		_el:SetWndPos(vector2():set(0,0))

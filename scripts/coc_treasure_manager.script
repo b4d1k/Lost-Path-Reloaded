@@ -7,7 +7,7 @@ This script spawns loot, randomly, inside all INVBOX class objects. Loot is dete
 within the .scoc as a string. When the cache is opened, the loot is spawned.
 
 A list of all valid item sections is generated automatically by parsing all of system_ini(). From this list, loot can be obtained. If you do not 
-want a certain section from being spawned, put it in 'plugins\coc_treasure_manager.ltx' 'ignore_sections'.
+want a certain section from being spawned, put it in 'plugins\treasure_blacklist' 'ignore_sections'.
 
 A valid item section is determined by several factors:
 1. It must have can_trade = true
@@ -26,8 +26,29 @@ will find the <filename>.lua in your savegame folder. Search the file for 'cache
 caches = {}
 local caches_count = 0
 
-local ltx = ini_file("plugins\\coc_treasure_manager.ltx")
 local valid_item_list = nil
+local valid_item_list_array = nil
+local valid_map_spots = {
+	["treasure"] = true,
+	["treasure_player"] = true,
+	["treasure_searched"] = true,
+	["treasure_unique"] = true
+}
+
+-- Table to put things that you wish only the specific count can ever only spawn
+local always_in_existence = {
+	["af_compass"] = 1,
+	["detector_advanced"] = 10,
+	["detector_elite"] = 4,
+	["detector_scientific"] = 1,
+	["detector_simple"] = 20,
+	["equ_military_pack"] = 5,
+	["equ_tourist_pack"] = 3,
+	["itm_repairkit_tier_1"] = 10,
+	["itm_repairkit_tier_2"] = 7,
+	["itm_repairkit_tier_3"] = 4,
+	["wpn_gauss"] = 1
+}
 ------------------------------------------------------------------------------------------------------------------
 --							PRIVATE
 ------------------------------------------------------------------------------------------------------------------
@@ -35,12 +56,17 @@ local function on_game_load()
 	if (caches_count > 0) then
 		return
 	end
+	
+	local ignore_list = {
+		["bar_inv_box"] = true,
+		["bar_inventory_box_2"] = true
+	}
 
 	local sim = alife()
 	for i=1, 65534 do
 		local se_obj = sim:object(i)
 		if (se_obj) then
-			if (IsInvbox(nil,se_obj:clsid())) then
+			if (IsInvbox(nil,se_obj:clsid()) and not ignore_list[se_obj:name()]) then
 				caches[se_obj.id] = false
 				caches_count = caches_count + 1
 			--elseif (se_obj:spawn_ini() and se_obj:spawn_ini():section_exist("drop_box")) then 
@@ -54,27 +80,43 @@ local function on_game_load()
 		create_random_stash(true,"stash")
 	end
 	
-	-- remove all unused stashes from the list
-	--[[
-	for k,v in pairs(caches) do 
-		if (v == false) then 
-			caches[k] = nil
+	local temp = {}
+	for section,count in pairs(always_in_existence) do
+		for i=1,count do
+			iempty_table(temp)
+			temp[1] = section
+			create_random_stash(true,"stash",temp)
 		end
 	end
-	--]]
 end
 
 local function actor_on_item_take_from_box(box,itm)
 	if (caches[box:id()] == true) then
-		caches[box:id()] = false
-		local hud = get_hud()
-		if (hud and box:is_inv_box_empty()) then
-			hud:HideActorMenu()
+		-- Remove all existing map spots from the cache.
+		-- Remember that this will only apply to randomly generated stashes.
+		for k, v in pairs(valid_map_spots) do
+			if level.map_has_object_spot(box:id(), k) then
+				level.map_remove_object_spot(box:id(), k)
+			end
 		end
-		level.map_remove_object_spot(box:id(), "treasure")
+
+		-- Mark the stash as "partially looted".
+		local id = alife_object(box:id()).id
+		level.map_add_object_spot_ser(id, "treasure_searched", game.translate_string("st_ui_pda_secret_searched"))
+		
+		-- Remove the cache from the treasure manager.
+		caches[box:id()] = false
 		xr_statistic.inc_counter("stashes_found")
 		news_manager.send_treasure(1)
 	end
+	
+	-- If no items remain; remove the "partially looted" marker.
+	if box:is_inv_box_empty() then
+		if level.map_has_object_spot(box:id(), "treasure_searched") then
+			level.map_remove_object_spot(box:id(), "treasure_searched")
+		end
+	end
+	
 end
 
 local function save_state(data)
@@ -122,7 +164,9 @@ end
 -------------------------------------------------------------------------------------------------------------------
 
 last_secret = nil
-function create_random_stash(no_spot,hint,bonus_items)
+function create_random_stash(no_spot,hint,bonus_items, map_spot)
+	map_spot = valid_map_spots[map_spot] and map_spot or "treasure"
+	
 	last_secret = nil
 
 	if (caches_count <= 0) then
@@ -135,14 +179,16 @@ function create_random_stash(no_spot,hint,bonus_items)
 
 	-- create a temporary table to use math.random
 	local t = {}
+	local size_t = 0
 	for id,v in pairs(caches) do
 		-- false means box is available
 		if (v == false) then
-			table.insert(t,id)
+			size_t = size_t + 1
+			t[size_t] = id
 		end
 	end
 
-	local index = #t > 0 and math.random(#t)
+	local index = size_t > 0 and math.random(size_t)
 	if not (index) then
 		return
 	end
@@ -154,9 +200,9 @@ function create_random_stash(no_spot,hint,bonus_items)
 		caches_count = caches_count - 1
 		return
 	end
-	
+
 	if not (valid_item_list) then 
-		valid_item_list = get_valid_item_sections()
+		valid_item_list,valid_item_list_array = get_valid_item_sections()
 	end
 	
 	local spawned_item = bonus_items or {}
@@ -182,93 +228,270 @@ function create_random_stash(no_spot,hint,bonus_items)
 		return string.find(v,"WP_") ~= nil
 	end
 	
+	local function is_ammo(section)
+		local v = ini:r_string_ex(section,"class","")
+		return v == "AMMO" or v == "AMMO_S"
+	end
+	
+	local function is_backpack(section)
+		local v = ini:r_string_ex(section,"class","")
+		return v == "EQ_BAKPK"
+	end
+	
+	local function is_toolkit(section)
+		return section == "itm_repairkit_tier_1" or section == "itm_repairkit_tier_2" or section == "itm_repairkit_tier_3"
+	end
+	
+	local function is_artefact(section)
+		local v = ini:r_string_ex(section,"class","")
+		return v == "SCRPTART"		
+	end
+	
+	local function is_detector(section)
+		local v = ini:r_string_ex(section,"class","")
+		return v == "DET_ADVA" or v == "DET_ELIT" or v == "DET_SCIE" or v == "DET_SIMP"
+	end
+
+	--\\ FOR DEBUG
+    local cost_lvls = {500,1000,3000,5000,9000,15000,25000}
+    if (DEV_DEBUG_DEV) and not sorted then 
+    -- iterate most expensive to least expensive by group.
+        local tsortc,tsorto,tsortw,tsorta,tsorts,tsort = {},{},{},{},{},{}
+        for section,cost in spairs(valid_item_list,function(t,a,b) return t[a] > t[b] end) do
+            if is_consumable(section) then table.insert(tsortc, section.." = "..cost)
+            elseif is_outfit(section) then table.insert(tsorto, section.." = "..cost)
+            elseif is_weapon(section) then table.insert(tsortw, section.." = "..cost)
+            elseif is_artefact(section) then table.insert(tsorta, section.." = "..cost)
+            elseif is_ammo(section) then table.insert(tsorts, section.." = "..cost)
+            else table.insert(tsort, section.." = "..cost)
+            end
+        end
+        local cfg = io.open("valid_item_sort.ltx","w+")
+        local function addgap(header, tname)
+            local cost
+            local lvl = 7
+            cfg:write(header.."\n\n")
+            for i=1,#tname do
+                cost = tonumber(tname[i]:match("=%s(%d+)"))
+                local once = nil
+                while ((lvl >= 1) and cost < cost_lvls[lvl]) do
+                    lvl = lvl - 1
+                    once = true
+                end
+                if once then cfg:write("// "..cost_lvls[lvl+1].." //\n") end
+                cfg:write(tname[i].."\n")
+            end
+        end
+       
+        addgap("### Outfits ###", tsorto)
+        addgap("\n### Weapons ###", tsortw)
+        addgap("\n### Consumables ###", tsortc)
+        addgap("\n### Artifacts ###", tsorta)
+        addgap("\n### Ammo ###", tsorts)
+        addgap("\n### Other ###", tsort)
+        cfg:close()
+        sorted = true
+    end
+	--//
+	
+	local has_spawned = false
 	local function try_spawn_item(sec,min,max,chance,weight)
 		if (max_weight >= weight) then 
 			local new_max = math.random(min,max)
 			for i=1,new_max do
-				if ((math.random(1,100)/100) <= chance) then 
-					table.insert(spawned_item,sec)
+				if ((math.random(1,1000)/1000) <= chance) then 
+					spawned_item[#spawned_item+1] = sec
 					max_weight = max_weight - weight
+					has_spawned = true
 				end
 			end
 		end
 	end
 	
 	local allow_item = true
-	-- iterate most expensive to least expensive or visa versa. Highest cost has highest weight. Consumables have higher max. Outfits have high weights.
-	local functor = random_choice(function(t,a,b) return t[a] > t[b] end,function(t,a,b) return t[a] < t[b] end)
-	for section,cost in spairs(valid_item_list,functor) do
-		
-		-- prevent a stash from having more than a single outfit or weapon
-		local skip = false
-		local bWeapon = is_weapon(section)
-		local bOutfit = not bWeapon and is_outfit(section)
-		if (bWeapon or bOutfit) then
-			if (allow_item) then
-				allow_item = false
-			else 
-				skip = true
+	utils.shuffle(valid_item_list_array)
+	for i,section in ipairs(valid_item_list_array) do
+		local cost = valid_item_list[section]
+		if not (always_in_existence[section]) then
+			has_spawned = false
+			local skip = false
+			
+			local bDetector = is_detector(section)
+			local bToolkit = not bDetector and is_toolkit(section)
+			local bArtefact = not bToolkit and is_artefact(section)
+			local bWeapon = not bArtefact and is_weapon(section)
+			local bOutfit = not bWeapon and is_outfit(section)
+			local bBackpack = not bWeapon and not bOutfit and is_backpack(section)
+			if (bWeapon or bOutfit or bBackpack or bArtefact) then
+				if not (allow_item) then
+					skip = true
+				end
 			end
-		end
-		
-		if not (skip) then
-			-- decide for each section based on chance, weight and item classification
-			if (cost <= 500) then
-				if (is_consumable(section)) then
-					try_spawn_item(section,1,4,0.25,40)
-				elseif (bOutfit) then
-					try_spawn_item(section,1,1,0.25,40)
-				elseif (bWeapon) then
-					try_spawn_item(section,1,1,0.25,40)
+			
+			if not (skip) then
+				if (bBackpack) then 
+					if (section == "equ_tourist_pack") then 
+						try_spawn_item(section,1,1,0.03,80)
+					elseif (section == "equ_military_pack") then
+						try_spawn_item(section,1,1,0.05,80)
+					else
+						try_spawn_item(section,1,1,0.10,50)
+					end
+				elseif (bDetector) then
+					local v = ini:r_string_ex(section,"class","")
+					if (v == "DET_SCIE") then
+						try_spawn_item(section,1,1,0.005,80)
+					elseif (v == "DET_ELIT") then 
+						try_spawn_item(section,1,1,0.05,60)
+					elseif (v == "DET_ADVA") then
+						try_spawn_item(section,1,1,0.10,50)
+					else 
+						try_spawn_item(section,1,1,0.15,40)
+					end
+				elseif (bToolkit) then 
+					if (section == "itm_repairkit_tier_3") then 
+						try_spawn_item(section,1,1,0.04,80)
+					elseif (section == "itm_repairkit_tier_2") then
+						try_spawn_item(section,1,1,0.08,80)
+					else
+						try_spawn_item(section,1,1,0.12,50)
+					end
 				else
-					try_spawn_item(section,1,1,0.25,40)
+					-- decide for each section based on chance, weight and item classification
+					if (cost <= cost_lvls[1]) then
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,3,0.50,40)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.20,50)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.05,40)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.05,50)
+						else
+							try_spawn_item(section,1,1,0.40,40)
+						end
+					elseif (cost <= cost_lvls[2]) then
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,2,0.20,50)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.10,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.04,40)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.05,60)
+						else
+							try_spawn_item(section,1,1,0.30,50)
+						end
+					elseif (cost <= cost_lvls[3]) then
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,1,0.10,60)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.05,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.03,40)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.02,70)
+						elseif (bArtefact) then
+							try_spawn_item(section,1,1,0.01,50)
+						else 
+							try_spawn_item(section,1,1,0.15,50)
+						end
+					elseif (cost <= cost_lvls[4]) then
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,1,0.10,60)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.03,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.01,60)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.01,80)
+						elseif (bArtefact) then
+							try_spawn_item(section,1,1,0.01,50)
+						else 
+							try_spawn_item(section,1,1,0.10,50)
+						end
+					elseif (cost <= cost_lvls[5]) then
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,1,0.05,60)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.01,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.005,80)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.005,80)
+						elseif (bArtefact) then
+							try_spawn_item(section,1,1,0.005,60)
+						else 
+							try_spawn_item(section,1,1,0.05,50)
+						end
+					elseif (cost <= cost_lvls[6]) then 
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,1,0.03,60)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.01,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.005,80)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.004,80)
+						elseif (bArtefact) then
+							try_spawn_item(section,1,1,0.003,70)
+						else 
+							try_spawn_item(section,1,1,0.03,50)
+						end
+					elseif (cost <= cost_lvls[7]) then
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,1,0.01,60)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.005,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.003,90)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.003,80)
+						elseif (bArtefact) then
+							try_spawn_item(section,1,1,0.001,80)
+						else 
+							try_spawn_item(section,1,1,0.01,50)
+						end
+					else
+						if (is_consumable(section)) then
+							try_spawn_item(section,1,1,0.005,60)
+						elseif (is_ammo(section)) then
+							try_spawn_item(section,1,1,0.003,60)
+						elseif (bOutfit) then
+							try_spawn_item(section,1,1,0.001,90)
+						elseif (bWeapon) then
+							try_spawn_item(section,1,1,0.001,80)
+						elseif (bArtefact) then
+							try_spawn_item(section,1,1,0.001,90)
+						else 
+							try_spawn_item(section,1,1,0.005,50)
+						end
+					end
 				end
-			elseif (cost <= 1000) then
-				if (is_consumable(section)) then
-					try_spawn_item(section,1,4,0.15,50)
-				elseif (bOutfit) then
-					try_spawn_item(section,1,1,0.15,50)
-				elseif (bWeapon) then
-					try_spawn_item(section,1,1,0.15,50)
-				else
-					try_spawn_item(section,1,1,0.15,50)
-				end
-			elseif (cost <= 3000) then
-				if (bOutfit) then
-					try_spawn_item(section,1,1,0.10,55)
-				elseif (bWeapon) then
-					try_spawn_item(section,1,1,0.10,45)
-				else 
-					try_spawn_item(section,1,1,0.10,45)
-				end
-			elseif (cost <= 5000) then
-				if (bOutfit) then
-					try_spawn_item(section,1,1,0.08,60)
-				elseif (bWeapon) then
-					try_spawn_item(section,1,1,0.08,50)
-				else 
-					try_spawn_item(section,1,1,0.08,50)
-				end
-			elseif (cost <= 10000) then
-				try_spawn_item(section,1,1,0.01,90)
-			elseif (cost <= 15000) then 
-				try_spawn_item(section,1,1,0.01,100)
-			elseif (cost <= 20000) then
-				try_spawn_item(section,1,1,0.01,110)
-			else
-				try_spawn_item(section,1,1,0.01,120)
 			end
-		end 
-		
-		if (max_weight <= 0) then
-			break
+			
+			if (has_spawned) and (bWeapon or bOutfit or bBackpack or bArtefact) then
+				if (allow_item) then 
+					allow_item = false 
+				end
+			end
+			
+			if (max_weight <= 0) then
+				break
+			end
 		end
 	end
 	
 	if (#spawned_item > 0) then
 		-- create map spot
-		if (no_spot ~= true and level.map_has_object_spot(id,"treasure") == 0) then
-			level.map_add_object_spot_ser(id, "treasure", hint or "")
+		local ignore = nil
+		for k, v in pairs(valid_map_spots) do
+			if (level.map_has_object_spot(id,k) ~= 0) then
+				ignore = true
+			end
+		end
+		if (no_spot ~= true and not ignore) then
+			level.map_add_object_spot_ser(id, map_spot or "treasure", hint or game.translate_string("st_ui_pda_secret"))
 			news_manager.send_treasure(0)
 		end
 		caches[id] = table.concat(spawned_item,",")
@@ -293,56 +516,60 @@ function try_spawn_treasure(box)
 	local spawned_item = alun_utils.str_explode(caches[id],",")
 	caches[id] = true
 	
-	local sec,ammos,ct,ammo_type,ammo_section
+	if not (valid_item_list) then 
+		valid_item_list,valid_item_list_array = get_valid_item_sections()
+	end
+	
+	local sec,ammos,ct,ammo_type
 	local ini = system_ini()
 	local sim = alife()
 	for i=1,#spawned_item do
 		sec = spawned_item[i]
-		if (sec ~= "" and ini:section_exist(sec)) then
-		
+		if (valid_item_list[sec] and sec ~= "" and ini:section_exist(sec)) then
 			if (utils.is_ammo(sec)) then 
-				create_ammo(sec,box:position(),box:level_vertex_id(),box:game_vertex_id(),id,math.random(10,30))
+				create_ammo(sec,box:position(),box:level_vertex_id(),box:game_vertex_id(),id,math.random(10,20))
 			else
+			
+				-- Chernobyl Weapon Pack / Arsenal Overhaul 3
+				-- Switches the weapon to a sighted variant if available.
+				if (math.random() <= 0.3) then
+					local sights = alun_utils.parse_list(ini, sec, "sights")
+					if (#sights > 0) then
+						sight = sights[math.random(#sights)]
+						local variant_section = sec .. "_" .. sight
+						if (ini:section_exist(variant_section)) then
+							sec = variant_section
+						end
+					end
+				end
+				
 				-- since we spawning on parent, we don't want to register object or packetdata will be inaccurate
-				local se_obj = sim:create(sec,box:position(),0,0,id,false)
+				local se_obj = sim:create(sec,box:position(),0,0,id)
 				if (se_obj) then
 					local cls = se_obj:clsid()
 					if (IsWeapon(nil,cls) and cls ~= clsid.wpn_knife_s) then
-						--printf("coc_treasure_manager: item is fa")
-						local data = stpk_utils.get_weapon_data(se_obj)
-						if (data) then
-							-- Create random addon flag for weapon
-							flag = 0
-							
-							if (ini:r_float_ex(sec,"scope_status")) then
-								flag = flag + 1
-							end
+						se_obj.condition = (math.random(70)+30)/100
 
-							if (ini:r_float_ex(sec,"grenade_launcher_status")) then
-								flag = flag + 2
-							end
-
-							if (ini:r_float_ex(sec,"silencer_status")) then
-								flag = flag + 4
-							end
-
-							flag = math.random(0,flag)
-
-							-- Create random ammo type
-							ammos = alun_utils.parse_list(ini,sec,"ammo_class")
-							ct = ammos and #ammos
-							ammo_type = ammos and ct and math.random(0,ct-1) or 0
-							ammo_section = ammo_type and ammos[ammo_type+1]
-
-							data.addon_flags = flag
-							data.ammo_type = ammo_type
-							data.condition = (math.random(70)+30)/100
-							stpk_utils.set_weapon_data(data,se_obj)
+						local flags = se_obj:get_addon_flags()
+						if (math.random() <= 0.3 and se_obj.scope_status == cse_alife_item_weapon.eAddonAttachable) then 
+							flags:set(cse_alife_item_weapon.eWeaponAddonScope,true)
 						end
-						--printf("coc_treasure_manager: item is fa- end")
-					end 
-					-- because we didn't register, we do it now, manually
-					alife():register(se_obj)
+
+						if (math.random() <= 0.3 and se_obj.grenade_launcher_status == cse_alife_item_weapon.eAddonAttachable) then
+							flags:set(cse_alife_item_weapon.eWeaponAddonGrenadeLauncher,true)
+						end
+
+						if (math.random() <= 0.3 and se_obj.silencer_status == cse_alife_item_weapon.eAddonAttachable) then
+							flags:set(cse_alife_item_weapon.eWeaponAddonSilencer,true)
+						end
+						
+						-- Create random ammo type
+						ammos = alun_utils.parse_list(ini,sec,"ammo_class")
+						ct = ammos and #ammos
+						ammo_type = ammos and ct and math.random(0,ct-1) or 0
+							
+						se_obj.ammo_type = ammo_type
+					end
 				end
 			end
 		else
@@ -373,7 +600,8 @@ function load(pk)
 end
 
 function get_valid_item_sections()
-	local t = {}
+	local ltx = ini_file("plugins\\coc_treasure_manager.ltx")
+	local t,tt = {},{}
 	local ini = system_ini()
 	ini:section_for_each(function(section)
 		if not (ltx:line_exist("ignore_sections",section)) then
@@ -383,9 +611,19 @@ function get_valid_item_sections()
 						if not (string.find(section,"mp_")) then
 							local name = ini:r_string_ex(section,"inv_name")
 							if (name and name ~= "" and name ~= "default") then
-								local cost = ini:r_float_ex(section,"cost") or 0
-								if (cost > 0) then
-									t[section] = cost
+								local class = ini:r_string_ex(section,"class")
+								if (class == "G_FAKE") then
+								else
+									-- Chernobyl Weapon Pack / Arsenal Overhaul 3
+									-- blacklist everything but base weapon, try_spawn_treasure will handle the randomization of sights
+									local parent_section = ini:r_string_ex(section,"parent_section")
+									if (parent_section == nil or parent_section == "" or parent_section == section) then
+										local cost = ini:r_float_ex(section,"cost") or 0
+										if (cost > 0) then
+											t[section] = cost
+											tt[#tt+1] = section
+										end
+									end
 								end
 							end
 						end
@@ -404,5 +642,5 @@ function get_valid_item_sections()
 		end
 		cfg:close()
 	end
-	return t
+	return t,tt
 end

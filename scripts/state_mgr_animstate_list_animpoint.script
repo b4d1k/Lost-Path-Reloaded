@@ -66,6 +66,18 @@ function add_animation_list()
 						idle	= { [0]	= "animpoint_sit_low_idle_1",
 									[1]	= "animpoint_sit_low_idle_1" },
 						rnd		= nil},
+
+		animpoint_sit		= {	prop	= { maxidle = 5,
+									sumidle = 3,
+									rnd = 80,
+									moving = true },
+						into	= { [0] = { "idle_0_to_sit_0" },
+									[1] = { "idle_0_to_sit_0" }},
+						out		= { [0] = { "sit_0_to_idle_0" },
+									[1] = { "sit_0_to_idle_0" }},
+						idle	= { [0]	= "sit_0_idle_0",
+									[1]	= "sit_0_idle_0" },
+						rnd		= nil},
 						
 		animpoint_sit_ass		= {	prop	= { maxidle = 5,
 									sumidle = 3,

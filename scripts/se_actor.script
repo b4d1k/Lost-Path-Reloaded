@@ -7,8 +7,8 @@ end
 
 function se_actor:on_register()
 	cse_alife_creature_actor.on_register(self)
-	story_objects.get_story_objects_registry():register(self.id, "actor")
-	simulation_objects.get_sim_obj_registry():register(self)
+	story_objects.register(self.id, "actor")
+	simulation_objects.register(self)
 	self.m_registred = true
 	--Alundaio
 	SendScriptCallback("se_actor_on_register",self)
@@ -20,8 +20,8 @@ function se_actor:on_register()
 end
 
 function se_actor:on_unregister()
-	unregister_story_object_by_id(self.id)
-	simulation_objects.get_sim_obj_registry():unregister(self)
+	story_objects.unregister(self.id)
+	simulation_objects.unregister(self)
 	--Alundaio
 	SendScriptCallback("se_actor_on_unregister",self)
 	cse_alife_creature_actor.on_unregister(self)
@@ -97,7 +97,7 @@ end
 
 function se_actor:sim_available()
 	-- Проверить не находится ли игрок ближе чем 50 метров к смарту закрытому для симуляции.
-	if smart_terrain.nearest_to_actor_smart.dist < 50 and simulation_objects.get_sim_obj_registry().objects[smart_terrain.nearest_to_actor_smart.id] == nil then
+	if (smart_terrain.nearest_to_actor_smart.dist < 50 and simulation_objects.available_by_id[smart_terrain.nearest_to_actor_smart.id] ~= true) then
 		return false
 	end
 	return true

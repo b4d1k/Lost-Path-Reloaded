@@ -24,17 +24,18 @@ function actor_binder:__init (obj) super(obj)
 end
 
 ----------------------------------------------------------------------------------------------------------------------
-function actor_binder:net_spawn(data)
+function actor_binder:net_spawn(se_abstract)
 	--alun_utils.debug_write("actor net spawn start")
+	
+	if object_binder.net_spawn(self,se_abstract) == false then
+		return false
+	end
 	
 	level.show_indicators()
 	self.bCheckStart = true
 	self.weapon_hide = false
 	self.weapon_hide_in_dialog = false
-
-	if object_binder.net_spawn(self,data) == false then
-		return false
-	end
+	
 	db.add_actor(self.object)
 	db.add_enemy(self.object)
 
@@ -70,10 +71,6 @@ function actor_binder:net_destroy()
 	
 	xr_sound.stop_sounds_by_id(self.object:id())
 
-	if(actor_stats.remove_from_ranking~=nil)then
-		actor_stats.remove_from_ranking(self.object:id())
-	end
-	
 	if (USE_MARSHAL) then 
 		UnregisterScriptCallback("save_state",self)
 	end
@@ -199,11 +196,15 @@ end
 function actor_binder:update(delta)
 	object_binder.update(self, delta)
 	--alun_utils.debug_write("actor update START")
+	
+	bind_stalker_ext.actor_on_update(self,delta)
+	
 	if not (db.actor:alive()) then
 		return
 	end
 	
 	if self.bCheckStart then -- first update after netspawn
+		self.bCheckStart = nil
 		--alun_utils.debug_write("actor first_update START")
 		bind_stalker_ext.actor_on_first_update(self,delta)
 
@@ -216,7 +217,7 @@ function actor_binder:update(delta)
 		
 		pda.fill_primary_objects()
 		self.object:activate_slot(self.loaded_active_slot or 0)
-		self.bCheckStart = nil
+		
 		db.actor.afterFirstUpdate = true
 		
 		if (self.character_icon) then 
@@ -230,6 +231,7 @@ function actor_binder:update(delta)
 		CreateTimeEvent(0,"obj_per_upd",1,set_obj_per_upd)
 		
 		printf("collectgarbage before=%sKb",collectgarbage("count")*1024)
+		collectgarbage("collect")
 		collectgarbage("collect")
 		printf("collectgarbage after=%sKb",collectgarbage("count")*1024)
 		--alun_utils.debug_write("actor first_update END")
@@ -264,11 +266,6 @@ function actor_binder:update(delta)
 	if sr_psy_antenna.psy_antenna then
 		sr_psy_antenna.psy_antenna:update(delta)
 	end
-
-	-- јпдейт доступности дл€ симул€ции.
-	simulation_objects.get_sim_obj_registry():update_avaliability(alife():actor())
-
-	bind_stalker_ext.actor_on_update(self,delta)
 	
 	--alun_utils.debug_write("actor update END 2")
 end

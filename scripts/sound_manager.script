@@ -5,10 +5,15 @@
 
 --' Таблица содержит менеджеры историй
 local sound_managers = {}
+--' Создать новый саунд-менеджер. Нужно передать уникальный айдишник
+function get_sound_manager(id)
+	if sound_managers[id] == nil then
+		sound_managers[id] = sound_manager(id)
+	end
+	return sound_managers[id]
+end
 
 local story_ltx = ini_file("misc\\sound_stories.ltx")
-
-
 --' Звуковой менеджер содержит в себе список персонажей, которые могут рассказать историю по ролям.
 class "sound_manager"
 function sound_manager:__init(id)
@@ -23,7 +28,7 @@ end
 --' Зарегистрировать НПС.
 function sound_manager:register_npc(npc_id)
 	--printf("Register sm npc [%s]:[%s]", self.id, npc_id)
-	table.insert(self.npc, {npc_id = npc_id})
+	self.npc[#self.npc+1] = {npc_id = npc_id}
 	--print_table(self.npc)
 end
 --' Отрегистрировать нпс
@@ -192,22 +197,6 @@ function sound_manager:set_story(story_id)
 	self.story = CStory(story_id)
 	--printf("Set story sm [%s] = [%s]", self.id, story_id)
 end
-
-
-
---' Создать новый саунд-менеджер. Нужно передать уникальный айдишник
-function get_sound_manager(id)
-	if sound_managers[id] == nil then
-		sound_managers[id] = sound_manager(id)
-	end
-	return sound_managers[id]
-end
-
-
-
-
-
-
 
 --' Класс "история". Содержит дерево фраз. У каждой фразы указано должен ли ее говорить рассказчик или слушатели.
 class "CStory"

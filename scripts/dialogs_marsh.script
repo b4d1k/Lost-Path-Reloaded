@@ -20,9 +20,9 @@ function ecolog_companion_task_1_give_reward(a,b)
 	if ((math.random(1,100)/100) <= 0.5) then
 		coc_treasure_manager.create_random_stash()
 	end
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"ecolog", 50})
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"csky", 25})
-	xr_effects.inc_faction_goodwill_to_actor(db.actor, nil, {"killer", 25})
+	game_relations.change_factions_community_num("ecolog",0,50)
+	game_relations.change_factions_community_num("csky",0,50)
+	game_relations.change_factions_community_num("killer",0,50)
 end
 
 -- transfer key from doctor

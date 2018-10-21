@@ -123,14 +123,10 @@ function has_completed_task_prerequisites(actor,npc,p)
 		return true 
 	end
 	
-	local precond = task_manager.task_ini:r_string_ex(p[1],"precondition")
-	if (precond and precond ~= "") then 
-		precond = xr_logic.parse_condlist(npc, p[1], "precondition", task_manager.task_ini:r_string_ex(p[1],"precondition") or "true")
-		if (precond == "false") then 
-			return false 
-		end 
-		if (db.actor and xr_logic.pick_section_from_condlist(db.actor, npc, precond) == "false") then 
-			return false 
+	local precond_condlist = task_manager.task_ini:r_string_to_condlist(p[1],"precondition")
+	if (precond_condlist and db.actor) then
+		if (xr_logic.pick_section_from_condlist(db.actor, npc, precond_condlist) == "false") then 
+			return false
 		end
 	end
 	
@@ -203,7 +199,7 @@ function sim_avail(actor,npc,p)
 	if not (smart) then 
 		return false 
 	end 
-	return smart.sim_avail == nil or smart.sim_avail and xr_logic.pick_section_from_condlist(actor, smart, smart.sim_avail) == "true" or false
+	return simulation_objects.available_by_id[smart.id] == true
 end 
 
 -- param 1 = smart
@@ -356,13 +352,13 @@ end
 -------------------------------
 function see_pure_enemy(actor,npc)
 	local st = db.storage[npc:id()]
-	local enemy = st and st.enemy_id and (db.storage[st.enemy_id] and db.storage[st.enemy_id].object or level.object_by_id(st.enemy_id))
+	local enemy = st and st.enemy_id and db.storage[st.enemy_id] and db.storage[st.enemy_id].object
 	return enemy and enemy:alive() and npc:see(enemy) or false
 end
 
 function pure_enemy_dist_le(actor,npc,p)
 	local st = db.storage[npc:id()]
-	local enemy = st and st.enemy_id and (db.storage[st.enemy_id] and db.storage[st.enemy_id].object or level.object_by_id(st.enemy_id))
+	local enemy = st and st.enemy_id and db.storage[st.enemy_id] and db.storage[st.enemy_id].object
 	return enemy and enemy:alive() and enemy:position():distance_to_sqr(npc:position()) <= p[1]^2 or false
 end
 
@@ -371,7 +367,7 @@ end
 -- param 2 is the smart name. If it's empty it will default to calling NPC's smart
 function is_enemy_on_job(actor, npc, p)
 	local st = db.storage[npc:id()]
-	local enemy = st and st.enemy_id and (db.storage[st.enemy_id] and db.storage[st.enemy_id].object or level.object_by_id(st.enemy_id))
+	local enemy = st and st.enemy_id and db.storage[st.enemy_id] and db.storage[st.enemy_id].object
 	if (enemy == nil or not enemy:alive()) then
 		return false
 	end
@@ -396,7 +392,7 @@ end
 -- param 1 is the smart name
 function enemy_smart(actor, npc, p)
 	local st = db.storage[npc:id()]
-	local enemy = st and st.enemy_id and (db.storage[st.enemy_id] and db.storage[st.enemy_id].object or level.object_by_id(st.enemy_id))
+	local enemy = st and st.enemy_id and db.storage[st.enemy_id] and db.storage[st.enemy_id].object
 	if (enemy == nil or not enemy:alive()) then
 		return false
 	end
@@ -411,7 +407,7 @@ end
 
 function has_pure_enemy(actor, npc)
 	local st = db.storage[npc:id()]
-	local enemy = st and st.enemy_id and (db.storage[st.enemy_id] and db.storage[st.enemy_id].object or level.object_by_id(st.enemy_id))
+	local enemy = st and st.enemy_id and db.storage[st.enemy_id] and db.storage[st.enemy_id].object
 	return enemy and enemy:alive() or false
 end
 
@@ -442,7 +438,7 @@ end
 function check_squad_name (actor , npc , p)
 	local squad = get_object_squad(npc)
 	if not (squad) then
-		return
+		return false
 	end
 
 	local sq
@@ -452,7 +448,7 @@ function check_squad_name (actor , npc , p)
 			return true
 		end
 	end
-	return
+	return false
 end
 
 function is_playing_sound (actor, npc)
@@ -565,6 +561,10 @@ function story_obj_in_zone_by_name (actor, npc, p)
 		return zone:inside(se_obj.position)
 	end
 	return false
+end
+
+function actor_inside_me(actor,zone,p)
+	return zone:inside(actor:position())
 end
 
 function actor_in_zone(actor, npc, p)
@@ -708,12 +708,7 @@ end
 
 -- Проверка, что лучшее оружие персонажа - пистолет
 function best_pistol(actor, npc)
-	local pistol = npc:item_in_slot(1)
-	if pistol ~= nil then
-		return true
-	else
-		return false
-	end
+	return npc:item_in_slot(2) ~= nil
 end
 
 -- Проверка, что персонажу нанесли смертельный хит. Проверять ТОЛЬКО на on_hit
@@ -1278,9 +1273,8 @@ function squad_has_enemy(actor, npc, p)
 		return false
 	end
 
-	local obj_by_id = level.object_by_id
 	for k in squad:squad_members() do
-		local npc_obj = k.id and object_by_id(k.id)
+		local npc_obj = k.id and db.storage[k.id] and db.storage[k.id].object
 		if (npc_obj and npc_obj:best_enemy() ~= nil) then 
 			return true 
 		end
@@ -1329,8 +1323,9 @@ function squads_in_zone_b41(actor, npc, p)
 	end
 
 	for k,v in pairs(SIMBOARD.smarts[smart.id].squads) do
-		if v ~= nil then
-			for j in v:squad_members() do
+		local squad = alife_object(k)
+		if squad then
+			for j in squad:squad_members() do
 				if not zone:inside(j.object.position) then
 					return false
 				end
@@ -1354,8 +1349,9 @@ function squads_in_zone_yan_smart_terrain_6_4(actor, npc, p)
 	end
 
 	for k,v in pairs(SIMBOARD.smarts[smart.id].squads) do
-		if v ~= nil then
-			for j in v:squad_members() do
+		local squad = alife_object(k)
+		if squad then
+			for j in squad:squad_members() do
 				if not zone:inside(j.object.position) then
 					return false
 				end
@@ -1705,7 +1701,7 @@ end
 
 
 function dead_body_searching(actor, npc)
-	return actor_menu.dead_body_searching
+	return ActorMenu.get_menu_mode() == 4
 end
 
 function jup_b47_npc_online(actor, npc, p)
@@ -1734,15 +1730,17 @@ function anomaly_has_artefact(actor, npc, p)
 	if af_name == nil then
 		local af_table = {}
 		for k,v in pairs(anomal_zone.artefact_ways_by_id) do
-			if alife_object(tonumber(k)) then
-				table.insert(af_table, alife_object(tonumber(k)):section_name())
+			local se_obj = alife_object(tonumber(k))
+			if (se_obj) then
+				af_table[#af_table+1] = se_obj:section_name()
 			end
 		end
 		return true, af_table
 	end
 
 	for k,v in pairs(anomal_zone.artefact_ways_by_id) do
-		if alife_object(tonumber(k)) and af_name == alife_object(tonumber(k)):section_name() then
+		local se_obj = alife_object(tonumber(k))
+		if (se_obj and se_obj:section_name() == af_name) then 
 			return true
 		end
 	end
@@ -2170,10 +2168,10 @@ function smart_empty(actor,npc,p)
 		return false
 	end
 	local smart_id = smart.id
-	local sim = alife()
 	for k,v in pairs(board.smarts[smart_id].squads) do
-		if (v.id and sim:object(v.id)) then
-			return false
+		local se_obj = alife_object(k)
+		if (se_obj) then 
+			return false 
 		end
 	end
 	return true
@@ -2185,10 +2183,8 @@ function npc_squad_has_enemy(actor,npc,p)
 		return false
 	end
 
-	local o
-	local object_by_id = level.object_by_id
 	for k in squad:squad_members() do
-		o = k.id and object_by_id(k.id)
+		local o = k.id and db.storage[k.id] and db.storage[k.id].object
 		if (o and o:best_enemy()) then
 			return true
 		end
@@ -2250,11 +2246,10 @@ function squad_hit_by_smart(actor,npc,p)
 		return false
 	end
 
-	local who,smart
-	local object_by_id = level.object_by_id
+	local storage = db.storage
 	for k in squad:squad_members() do
-		who = k.id and db.storage[k.id].hitted_by and object_by_id(db.storage[k.id].hitted_by)
-		smart = who and xr_gulag.get_npc_smart(who)
+		local who = k.id and storage[k.id] and storage[k.id].hitted_by and storage[storage[k.id].hitted_by] and storage[storage[k.id].hitted_by].object
+		local smart = who and xr_gulag.get_npc_smart(who)
 		if (smart and smart:name() == p[1]) then
 			return true
 		end
@@ -2266,7 +2261,7 @@ function actor_look_away(actor,npc)
 	if not (db.actor) then 
 		return false 
 	end
-	if (not db.actor:see(npc) or (alun_utils.angle_diff(db.actor:direction(), db.actor:position():sub(npc:position()))<90 and npc:position():distance_to(db.actor:position()) > 2.5) or npc:position():distance_to(db.actor:position())>100) then
+	if (not db.actor:see(npc) or (utils.angle_diff(db.actor:direction(), db.actor:position():sub(npc:position()))<90 and npc:position():distance_to(db.actor:position()) > 2.5) or npc:position():distance_to(db.actor:position())>100) then
 		return true
 	end
 	return false
@@ -2324,9 +2319,9 @@ function job_on_point(actor,npc,p)
 	-- p[1] = smart_name p[2] = logic p[3] = index p[4] = less_than_equal_to Distance p[5] = return true if object is dead or doesn't exist
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	local st = db.storage[obj]
-	obj = obj and (st and st.object or level.object_by_id(obj))
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local st = id and db.storage[id]
+	local obj = st and st.object
 	if not (obj) then
 		return p[5] == "true"
 	end
@@ -2378,7 +2373,7 @@ function obj_on_job(actor,npc,p)
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
 	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
 	local st = id and db.storage[id]
-	local obj = id and (st and st.object or level.object_by_id(id))
+	local obj = st and st.object
 	--printf("obj=%s",obj and obj:name())
 	if not (p[3]) then
 		return obj and obj:alive() or false
@@ -2392,8 +2387,8 @@ end
 function see_obj_on_job(actor,npc,p)
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	obj = obj and (db.storage[obj] and db.storage[obj].object or level.object_by_id(obj))
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local obj = id and db.storage[id] and db.storage[id].object
 	return obj and obj:alive() and npc:memory_time(obj) < 5000 or false
 end
 
@@ -2403,9 +2398,9 @@ end
 function obj_on_job_danger(actor,npc,p)
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	obj = obj and (db.storage[obj] and db.storage[obj].object or level.object_by_id(obj))
-	return obj and db.storage[obj:id()].danger_flag or false
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local obj = id and db.storage[id] and db.storage[id].object
+	return obj and db.storage[id].danger_flag or false
 end
 
 -- Returns true if a NPC on a given job was hit by calling NPC
@@ -2414,14 +2409,14 @@ end
 function obj_on_job_hit_by(actor,npc,p)
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	obj = obj and (db.storage[obj] and db.storage[obj].object or level.object_by_id(obj))
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local obj = id and db.storage[id] and db.storage[id].object
 	if (not obj and not obj:alive()) then
 		return false
 	end
 
-	local id = db.storage[obj:id()].hitted_by
-	return id and id == npc:id() or false
+	local who_id = db.storage[id].hitted_by
+	return who_id and who_id == npc:id() or false
 end
 
 -- Returns true if a NPC's on a given job has a given active section
@@ -2431,10 +2426,9 @@ end
 function job_active_section(actor,npc,p)
 	local board = SIMBOARD
 	local smart = p[1] and board and board.smarts_by_names[p[1]]
-	local obj = smart and smart.npc_by_job_section["logic@"..p[2]]
-	obj = obj and (db.storage[obj] and db.storage[obj].object or level.object_by_id(obj))
-	local st = obj and db.storage[obj:id()]
-	return st and st.active_section == p[3] or false
+	local id = smart and smart.npc_by_job_section["logic@"..p[2]]
+	local obj = id and db.storage[id] and db.storage[id].object
+	return obj and db.storage[id].active_section == p[3] or false
 end
 
 -- Returns true if ONLY monster-type NPC's occupy a given smart
@@ -2503,7 +2497,8 @@ function smart_squad_by_faction_in_radius(actor,npc,p)
 		return false 
 	end 
 
-	for k,squad in pairs(smrt.squads) do
+	for k,v in pairs(smrt.squads) do
+		local squad = alife_object(k)
 		if (squad and squad.player_id == p[2] and squad.position:distance_to_sqr(smart.position) <= tonumber(p[3])^2) then
 			return true
 		end
@@ -2535,7 +2530,8 @@ function smart_stayed_squad_count_ge_by_faction(actor,npc,p)
 	end 
 
 	local count = 0
-	for k,squad in pairs(smrt.squads) do
+	for k,v in pairs(smrt.squads) do
+		local squad = alife_object(k)
 		if (squad and simulation_objects.is_on_the_same_level(squad, smart) and squad.current_target_id and squad.current_target_id == smart.id and squad.current_action == 1) then
 			if (p[4] == "true" or not squad:get_script_target()) then
 				if (squad.stay_time) and (p[3] == "nil" or game.get_game_time():diffSec(squad.stay_time) <= (tonumber(p[3]) or 0)) then
@@ -2565,7 +2561,7 @@ end
 function all_avail_smart_stayed_squad_count_ge_by_faction(actor,npc,p)
 	if (#p >= 4) then
 		for name,v in pairs(SIMBOARD.smarts_by_names) do
-			if (v.online) and (v.sim_avail == nil or v.sim_avail and xr_logic.pick_section_from_condlist(actor, v, v.sim_avail) == "true") then
+			if (v.online) and (simulation_objects.available_by_id[v.id] == true) then
 				if (smart_stayed_squad_count_ge_by_faction(actor,npc,{name,unpack(p)}) == true) then 
 					return true 
 				end
@@ -2584,12 +2580,9 @@ function all_avail_smart_stayed_squad_count_ge_by_faction_ex(actor,npc,p)
 		local actor_level = sim:level_name(gg:vertex(sim:actor().m_game_vertex_id):level_id())
 
 		for name,v in pairs(SIMBOARD.smarts_by_names) do
-			if (v.sim_avail == nil or v.sim_avail and xr_logic.pick_section_from_condlist(actor, v, v.sim_avail) == "true") then
-				local smart_level = alife():level_name(game_graph():vertex(v.m_game_vertex_id):level_id())
-				if (v.online or DEACTIVATE_SIM_ON_NON_LINKED_LEVELS ~= true or string.find(simulation_objects.config:r_value(actor_level,"target_maps",0,""),smart_level)) then
-					if (smart_stayed_squad_count_ge_by_faction(actor,npc,{name,unpack(p)}) == true) then 
-						return true 
-					end
+			if (simulation_objects.available_by_id[v.id] == true) then
+				if (smart_stayed_squad_count_ge_by_faction(actor,npc,{name,unpack(p)}) == true) then 
+					return true 
 				end
 			end
 		end
@@ -2613,7 +2606,8 @@ function smart_squad_count_ge_by_faction(actor,npc,p)
 	end 
 
 	local count = 0
-	for k,squad in pairs(smrt.squads) do
+	for k,v in pairs(smrt.squads) do
+		local squad = alife_object(k)
 		if (squad and squad.player_id == p[2]) then
 			count = count + 1
 		end
@@ -2963,4 +2957,12 @@ end
 
 function get_start_time_elapsed_ge(actor,npc,p)
 	return p[1] and tonumber(game.get_game_time():diffSec(level.get_start_time())) >= tonumber(p[1])
+end
+
+function base_defense_is_actor_on_level(actor,npc,p)
+	local name = utils.load_var(db.actor,"base_defense_level")
+	if (name) then 
+		return name == level.name()
+	end 
+	return true
 end

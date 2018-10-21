@@ -144,7 +144,7 @@ function fake_monster:set_positions()
 
 	self.current	= self.st.path:point(self.cur_point)
 	self.target		= self.st.path:point(self:next_point())
-	self.dir		= vector():sub(self.target, self.current):normalize()
+	self.dir		= vec_sub(self.target, self.current):normalize()
 end
 
 

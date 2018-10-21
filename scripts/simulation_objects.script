@@ -28,48 +28,80 @@ local default_monster_behaviour = {
 	["territory"]		= 1
 }
 
-class "simulation_objects_registry"
-function simulation_objects_registry:__init()
-	self.objects = {}
-end
-
-function simulation_objects_registry:register(obj)
-	self:get_props(obj)
-	self:update_avaliability(obj)
-end
-
-function simulation_objects_registry:update_avaliability(obj)
-	if (obj:clsid() == clsid.online_offline_group_s) then 
-		return
-	end 
+available_by_id = {}
+object_registry = {}
+object_registry_size = 0
+function on_game_start()	
+	local index = 0
+	local function main_loop()
+		
+		index = index + 1
+		if (index > object_registry_size) then 
+			index = 0
+		end
+		
+		local se_obj = object_registry[index]
+		if not (se_obj) then
+			index = 0
+			return false 
+		end
+		
+		if (se_obj.sim_avail) then 
+			if (xr_logic.pick_section_from_condlist(nil, se_obj, se_obj.sim_avail) == "true") then 
+				available_by_id[se_obj.id] = true
+			else 
+				available_by_id[se_obj.id] = false
+			end
+		else -- default true if no condlist
+			available_by_id[se_obj.id] = true
+		end
 	
-	if (obj:sim_available() and xr_logic.pick_section_from_condlist(alife():actor(), obj, obj.sim_avail) == "true") then
-		self.objects[obj.id] = obj
+		return false
+	end
+	AddUniqueCall(main_loop) -- Why waste CPU on main thread per object update, we use PH Commander thread here. 
+end
+
+function register(se_obj)
+	object_registry_size = object_registry_size + 1
+	object_registry[object_registry_size] = se_obj
+	get_props(se_obj)
+	if (xr_logic.pick_section_from_condlist(nil, se_obj, se_obj.sim_avail) == "true") then
+		available_by_id[se_obj.id] = true
 	else
-		self.objects[obj.id] = nil
+		available_by_id[se_obj.id] = false
+	end
+end 
+
+function unregister(se_obj)
+	for i=object_registry_size,1,-1 do 
+		if (object_registry[i].id == se_obj.id) then 
+			table.remove(object_registry,i)
+			object_registry_size = object_registry_size - 1
+			return
+		end
 	end
 end
 
-function simulation_objects_registry:get_props(obj)
-	local cls = obj:clsid()
+function get_props(se_obj)
+	local cls = se_obj:clsid()
 	if (cls == clsid.online_offline_group_s) then 
-		return
+		return -- intentionally ignore squad targeting squads in coc
 	end
 	
-	obj.props = {}
+	se_obj.props = {}
 	
 	local props_section
 	if (cls == clsid.online_offline_group_s) then
-		if (props_ini:section_exist(obj:section_name())) then 
-			props_section = obj:section_name()
+		if (props_ini:section_exist(se_obj:section_name())) then 
+			props_section = se_obj:section_name()
 		else 
 			props_section = "default_squad"
 		end
 	elseif (cls == clsid.script_actor) then 
 		props_section = "actor"
 	else 
-		if (props_ini:section_exist(obj:name())) then 
-			props_section = obj:name()
+		if (props_ini:section_exist(se_obj:name())) then 
+			props_section = se_obj:name()
 		else 
 			props_section = "default"
 		end
@@ -81,36 +113,28 @@ function simulation_objects_registry:get_props(obj)
 	end
 	
 	local n = props_ini:line_count(props_section)
-	local result, prop_name, prop_condlist
-	local tonumber = tonumber
 	for j=0,n-1 do
-		result, prop_name, prop_condlist = props_ini:r_line_ex(props_section,j,"","")
+		local result, prop_name, prop_condlist = props_ini:r_line_ex(props_section,j,"","")
 		if prop_name == "sim_avail" then
-			obj.sim_avail = xr_logic.parse_condlist(nil, "simulation_object", "sim_avail", prop_condlist)
+			se_obj.sim_avail = xr_logic.parse_condlist(nil, "simulation_object", "sim_avail", prop_condlist)
 		else
-			obj.props[prop_name] = tonumber(prop_condlist)
+			se_obj.props[prop_name] = tonumber(prop_condlist)
 		end
 	end
-	if obj.sim_avail == nil then
-		obj.sim_avail = xr_logic.parse_condlist(nil, "simulation_object", "sim_avail", "true")
-	end
 end
 
-function simulation_objects_registry:unregister(obj)
-	self.objects[obj.id] = nil
-end
-
-function get_sim_obj_registry()
-	if sim_objects_registry == nil then
-		sim_objects_registry = simulation_objects_registry()
+function get_server_entity(id)
+	for i=1,object_registry_size do
+		local se_obj = object_registry[i]
+		if (se_obj.id == id) then 
+			return se_obj
+		end
 	end
-	return sim_objects_registry
 end
 
 --***********************************************************************************************
 --*										SIMULATION_LOCAL_FUNCTIONS								*
 --***********************************************************************************************
-
 
 function sim_dist_to(obj1 , obj2)
 	local pos1,lv1,gv1 = obj1:get_location()
@@ -128,7 +152,7 @@ end
 
 function is_on_the_same_level(obj1, obj2)
 	local gg = game_graph()
-	return obj1 and obj2 and gg:vertex(obj1.m_game_vertex_id):level_id() == gg:vertex(obj2.m_game_vertex_id):level_id() or false
+	return (obj1 and obj2) and (obj1.m_game_vertex_id == obj2.m_game_vertex_id or gg:vertex(obj1.m_game_vertex_id):level_id() == gg:vertex(obj2.m_game_vertex_id):level_id()) or false
 end
 
 function evaluate_prior(target, squad)
@@ -177,6 +201,10 @@ function evaluate_prior(target, squad)
 	elseif (target:clsid() == clsid.smart_terrain) then
 
 		if (target.disabled) then
+			return 0
+		end
+		
+		if (SIMBOARD.smarts[target.id] and SIMBOARD.smarts[target.id].population >= target.max_population) then
 			return 0
 		end
 

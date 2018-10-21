@@ -2,90 +2,14 @@ class "options_dialog" (CUIScriptWnd)
 
 function options_dialog:__init() super()
 	self.m_preconditions = {}
-	self.gameplay_options = {}
 	
     self:InitControls()
     self:InitCallBacks()
 	self.tab:SetActiveTab("video")
 	SendScriptCallback("opt_menu_on_init",self)
 	
-	-- auto-generate UI elements for Gameplay Tab
-	local checks, lists, elements = {}, {}, {}
-	local _st 
-	self.scroll_v:Clear()
-	
-	-- add UI elements to scroll view in specific order
-	for cap,t in pairs(self.gameplay_options) do
-		if not (t.disabled) then
-			_st = self.xml:InitStatic("tab_gameplay:templ_item", nil)
-			
-			-- caption
-			local ctrl = self.xml:InitStatic("tab_gameplay:cap_check_axr",_st) -- ctrl needs scoped here because we pass it to wrapper or else ref will get replaced
-			
-			-- set caption text
-			ctrl:TextControl():SetText(game.translate_string("ui_mm_"..cap))
-			
-			-- control
-			if (t.typ == "check") then
-				-- sort by name and type
-				table.insert(checks,ctrl:TextControl():GetText())
-				elements[ctrl:TextControl():GetText()] = _st
-			
-				-- create control
-				ctrl = self.xml:InitCheck(t.tag or "tab_gameplay:check_axr",_st)
-				
-				-- register for callbacks
-				if (t.default ~= nil) then -- obviously dynamic axr option
-					self:Register(ctrl,"ck_"..cap)
-				end
-			elseif(t.typ == "list") then 
-				-- sort by name and type
-				table.insert(lists,ctrl:TextControl():GetText())
-				elements[ctrl:TextControl():GetText()] = _st
-				
-				-- create control
-				ctrl = self.xml:InitComboBox(t.tag or "tab_gameplay:list_axr",_st)
-				
-				-- setup the list
-				if (t.list) then
-					for i,v in ipairs(t.list) do 
-						ctrl:AddItem(v,i-1)
-					end
-				end
-		
-				-- register for callbacks
-				if (t.default ~= nil) then -- obviously dynamic axr option
-					self:Register(ctrl,"lst_"..cap)
-					if (t.on_list_item_select) then
-						local _wrapper = function(handler) -- we need wrapper in order to pass ctrl to method
-							t.on_list_item_select(handler,ctrl)
-						end
-						self:AddCallback("lst_"..cap,ui_events.LIST_ITEM_SELECT,_wrapper,self)
-					end
-				end
-			end
-			
-			self.gameplay_options[cap].ctrl = ctrl
-		end
-	end 
-	
-	-- sort ui elements to display in alphabetical order
-	table.sort(lists)
-	table.sort(checks)
-	
-	for i=1,#lists do 
-		-- add to UIScrollView
-		self.gameplay_scroll_v:AddWindow(elements[lists[i]],true) 
-		elements[lists[i]]:SetAutoDelete(false)
-	end
-
-	for i=1,#checks do 
-		-- add to UIScrollView
-		self.gameplay_scroll_v:AddWindow(elements[checks[i]],true) 
-		elements[checks[i]]:SetAutoDelete(false)
-	end
-
-	self.message_box = CUIMessageBoxEx()
+	self:InitDynamicOptions("gameplay")
+	self:InitDynamicOptions("gameplay_ui")
 end
 
 function options_dialog:__finalize()
@@ -123,6 +47,12 @@ function options_dialog:InitControls()
 	self.dialog:AttachChild		(self.dlg_gameplay)
 	xml:InitWindow				("tab_size", 0, self.dlg_gameplay)
 
+	self.dlg_gameplay_ui		= ui_mm_opt_gameplay.opt_gameplay_ui()
+	self.dlg_gameplay_ui:InitControls(0,0, xml, self)
+	self.dlg_gameplay_ui:Show		(false)
+	self.dialog:AttachChild		(self.dlg_gameplay_ui)
+	xml:InitWindow				("tab_size", 0, self.dlg_gameplay_ui)
+	
 	self.dlg_controls			= ui_mm_opt_controls.opt_controls()
 	self.dlg_controls:InitControls(0,0, xml, self)
 	self.dlg_controls:Show		(false)
@@ -144,12 +74,13 @@ function options_dialog:InitControls()
 	self.tab					= xml:InitTab("main_dialog:tab", self.dialog)
 	self:Register				(self.tab, "tab")
 
-
 	self.message_box			= CUIMessageBoxEx()
 	self:Register				(self.message_box, "mb")
 
 	self.b_restart_system_shown	= false
 	self.timer					= nil
+	
+	self.scroll_v:Clear()
 end
 
 function options_dialog:SetCurrentValues()
@@ -167,6 +98,9 @@ function options_dialog:SetCurrentValues()
 	opt:SetCurrentValues("mm_opt_gameplay")
 	opt:SaveBackupValues("mm_opt_gameplay")
 
+	opt:SetCurrentValues("mm_opt_gameplay_ui")
+	opt:SaveBackupValues("mm_opt_gameplay_ui")
+	
 	opt:SetCurrentValues("mm_opt_sound")
 	opt:SaveBackupValues("mm_opt_sound")
 
@@ -179,6 +113,87 @@ function options_dialog:SetCurrentValues()
 	SendScriptCallback("opt_menu_on_set_values",self,opt)
 
 	self:UpdateDependControls()
+end
+
+function options_dialog:InitDynamicOptions(tab)
+	-- auto-generate UI elements for Gameplay Tab
+	local checks, lists, elements = {}, {}, {}
+	local _st
+	
+	local tab_name = "tab_"..tab
+	local tab_table = self[tab.."_options"]
+	
+	-- add UI elements to scroll view in specific order
+	for cap,t in pairs(tab_table) do
+		if not (t.disabled) then
+			_st = self.xml:InitStatic(tab_name..":templ_item", nil)
+			
+			-- caption
+			local ctrl = self.xml:InitStatic(tab_name..":cap_check_axr",_st) -- ctrl needs scoped here because we pass it to wrapper or else ref will get replaced
+			
+			-- set caption text
+			ctrl:TextControl():SetText(game.translate_string("ui_mm_"..cap))
+			
+			-- control
+			if (t.typ == "check") then
+				-- sort by name and type
+				table.insert(checks,ctrl:TextControl():GetText())
+				elements[ctrl:TextControl():GetText()] = _st
+			
+				-- create control
+				ctrl = self.xml:InitCheck(t.tag or tab_name..":check_axr",_st)
+				
+				-- register for callbacks
+				if (t.default ~= nil) then -- obviously dynamic axr option
+					self:Register(ctrl,"ck_"..cap)
+				end
+			elseif(t.typ == "list") then 
+				-- sort by name and type
+				table.insert(lists,ctrl:TextControl():GetText())
+				elements[ctrl:TextControl():GetText()] = _st
+				
+				-- create control
+				ctrl = self.xml:InitComboBox(t.tag or tab_name..":list_axr",_st)
+				
+				-- setup the list
+				if (t.list) then
+					for i,v in ipairs(t.list) do 
+						ctrl:AddItem(v,i-1)
+					end
+				end
+		
+				-- register for callbacks
+				if (t.default ~= nil) then -- obviously dynamic axr option
+					self:Register(ctrl,"lst_"..cap)
+					if (t.on_list_item_select) then
+						local _wrapper = function(handler) -- we need wrapper in order to pass ctrl to method
+							t.on_list_item_select(handler,ctrl)
+						end
+						self:AddCallback("lst_"..cap,ui_events.LIST_ITEM_SELECT,_wrapper,self)
+					end
+				end
+			end
+			
+			t.ctrl = ctrl
+		end
+	end 
+	
+	-- sort ui elements to display in alphabetical order
+	table.sort(lists)
+	table.sort(checks)
+	
+	local dlg_name = "dlg_"..tab
+	for i=1,#lists do 
+		-- add to UIScrollView
+		self[dlg_name].scroll_v:AddWindow(elements[lists[i]],true) 
+		elements[lists[i]]:SetAutoDelete(false)
+	end
+
+	for i=1,#checks do 
+		-- add to UIScrollView
+		self[dlg_name].scroll_v:AddWindow(elements[checks[i]],true) 
+		elements[checks[i]]:SetAutoDelete(false)
+	end
 end
 
 function options_dialog:UpdateDependControls()
@@ -267,13 +282,14 @@ function options_dialog:OnBtnAccept()
 	opt:SaveValues("mm_opt_video")
 	opt:SaveValues("mm_opt_video_adv")
 	opt:SaveValues("mm_opt_gameplay")
+	opt:SaveValues("mm_opt_gameplay_ui")
 	opt:SaveValues("mm_opt_sound")
 	opt:SaveValues("mm_opt_controls")
 
 	SendScriptCallback("opt_menu_on_accept",self,opt,console)
 
 	if opt:NeedVidRestart() then
-		_G.b_discard_settings_shown = true
+		self.b_discard_settings_shown = true
 		self.message_box:InitMessageBox("message_box_yes_no")
 		self.message_box:SetText(string.format("%s %d% s", game.translate_string("ui_mm_confirm_changes"), 15, game.translate_string("mp_si_sec")))
 		self.message_box:ShowDialog(true)
@@ -300,11 +316,12 @@ function options_dialog:OnBtnCancel()
 end
 
 function options_dialog:OnTabChange()
-	self.dlg_video:Show		(false)
-	self.dlg_sound:Show		(false)
-	self.dlg_gameplay:Show	(false)
-	self.dlg_controls:Show	(false)
-	self.dlg_video_adv:Show	(false)
+	self.dlg_video:Show(false)
+	self.dlg_sound:Show(false)
+	self.dlg_gameplay:Show(false)
+	self.dlg_gameplay_ui:Show(false)
+	self.dlg_controls:Show(false)
+	self.dlg_video_adv:Show(false)
 
 	local ids = self.tab:GetActiveId()
 	if ids == "video" then
@@ -313,6 +330,8 @@ function options_dialog:OnTabChange()
 		self.dlg_sound:Show(true)
 	elseif ids == "gameplay" then
 		self.dlg_gameplay:Show(true)
+	elseif ids == "gameplay_ui" then
+		self.dlg_gameplay_ui:Show(true)
 	elseif ids == "controls" then
 		self.dlg_controls:Show(true)
 	end
@@ -370,7 +389,7 @@ function options_dialog:Update()
 
 	local mm = main_menu.get_main_menu()
 
-	if(_G.b_discard_settings_shown) then
+	if(self.b_discard_settings_shown) then
 		local tg = math.floor(time_global_async()/1000)
 		if(self.timer==nil) then
 			self.timer = tg
@@ -396,7 +415,7 @@ end
 
 function options_dialog:OnApplyChanges()
     self.timer = nil
-    _G.b_discard_settings_shown = false
+    self.b_discard_settings_shown = false
 
 	self.owner:ShowDialog(true)
 	if (self:IsShown()) then
@@ -407,12 +426,9 @@ function options_dialog:OnApplyChanges()
 
 	if not (self.b_restart_system_shown and self.message_box:IsShown()) then
 		local opt = COptionsManager()
-		if opt:NeedSystemRestart() then
-			self.b_restart_system_shown = true
-			self.message_box:InitMessageBox("message_box_restart_game")
-			self.message_box:ShowDialog(true)
-		elseif (self.b__require_restart == true) then 
+		if (opt:NeedSystemRestart() or self.b__require_restart == true) then
 			self.b__require_restart = false
+			self.b_restart_system_shown = true
 			self.message_box:InitMessageBox("message_box_restart_game")
 			self.message_box:ShowDialog(true)
 		end
@@ -421,7 +437,7 @@ end
 
 function options_dialog:OnDiscardChanges()
     self.timer = nil
-    _G.b_discard_settings_shown = false
+    self.b_discard_settings_shown = false
 
 	local c = get_console()
    	c:execute("cfg_load tmp")
@@ -433,7 +449,7 @@ function options_dialog:OnDiscardChanges()
 end
 
 function options_dialog:OnMenuReloaded()
-	if(_G.b_discard_settings_shown) then
+	if(self.b_discard_settings_shown) then
 	    self.message_box:InitMessageBox("message_box_yes_no")
 	    self.message_box:SetText(string.format("%s %d% s", game.translate_string("ui_mm_confirm_changes"), 15, game.translate_string("mp_si_sec")))
 	    self.message_box:ShowDialog(true)

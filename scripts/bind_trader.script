@@ -48,8 +48,8 @@ function trader_object_binder:update(delta)
 	end
 end
 
-function trader_object_binder:net_spawn(sobject)
-	if not object_binder.net_spawn(self, sobject) then
+function trader_object_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
 		return false
 	end
 
@@ -158,7 +158,7 @@ function trader_object_binder:save_state(m_data)
 	state.xr_logic.section_logic = st.section_logic
 	state.xr_logic.active_section = st.active_section
 	state.xr_logic.gulag_name = st.gulag_name
-	state.xr_logic.activation_time = (st.activation_time or 0) - time_global()
+	state.xr_logic.activation_time = (st.activation_time or time_global()) - time_global()
 	state.xr_logic.activation_game_time = st.activation_game_time
 
 	--xr_sound.npc_save_state(id,state)
@@ -177,13 +177,14 @@ function trader_object_binder:load_state()
 	local id = self.object:id()
 	db.storage[id] = db.storage[id] or {}	
 	local st = db.storage[id]
+	st.object = self.object
 	--alun_utils.debug_write(strformat("trader_object_binder:load_state %s BEFORE",id))
 	--st.job_ini = state.xr_logic.job_ini
 	st.loaded_ini_filename = state.xr_logic.ini_filename
 	st.loaded_section_logic = state.xr_logic.section_logic
 	st.loaded_active_section = state.xr_logic.active_section
 	st.loaded_gulag_name = state.xr_logic.gulag_name or ""
-	st.activation_time = state.xr_logic.activation_time and state.xr_logic.activation_time + time_global() or time_global()
+	st.activation_time = time_global() + (state.xr_logic.activation_time or 0)
 	st.activation_game_time = state.xr_logic.activation_game_time or game.get_game_time()
 	state.xr_logic = nil
 	--xr_sound.npc_load_state(id,state)

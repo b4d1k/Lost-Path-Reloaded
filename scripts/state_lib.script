@@ -271,6 +271,20 @@ states = {
 				animstate = nil,
 				animation = "bloodsucker_search",
 			},
+	check_corpse = {	weapon = "unstrapped",
+				movement = move.stand,
+				mental = anim.danger,
+				bodystate = move.standing,
+				animstate = nil,
+				animation = "check_corpse",
+			},
+	kick_corpse = {	weapon = "unstrapped",
+				movement = move.stand,
+				mental = anim.danger,
+				bodystate = move.standing,
+				animstate = nil,
+				animation = "kick_corpse",
+			},
 	give_orders	= {	weapon = "unstrapped",
 				movement = move.stand,
 				mental = anim.danger,
@@ -638,14 +652,20 @@ states = {
 				animation = "punch"
 			},
 
-	search_corpse = {weapon = "strapped",
+	search_corpse = {weapon = "unstrapped",
 				movement = move.stand,
 				mental = anim.danger,
 				bodystate = move.crouch,
 				animstate = nil,
 				animation = "search_corpse"
 			},
-
+	search_corpse_holstered = {weapon = "strapped",
+				movement = move.stand,
+				mental = anim.danger,
+				bodystate = move.crouch,
+				animstate = nil,
+				animation = "search_corpse_holstered"
+			},
 	help_wounded = {weapon = "strapped",
 				movement = move.stand,
 				mental = anim.danger,
@@ -879,6 +899,15 @@ states = {
 				animstate = nil,
 				animation = "wounded_zombie"
 			},
+	wounded_hail = {	
+				weapon = "none",
+				movement = move.stand,
+				mental = anim.danger,
+				bodystate = move.crouch,
+				direction = look.cur_dir,
+				animstate = nil,
+				animation = "wounded_hail"
+			},			
 	trans_0 = {	weapon = "strapped",
 				movement = move.stand,
 				mental = anim.free,
@@ -913,21 +942,25 @@ states = {
 	psy_pain = {weapon = "none",
 				movement = move.stand,
 				mental = anim.free,
+				direction = look.cur_dir,
 				bodystate = move.standing,
 				animstate = nil,
 				animation = "psy_armed"
 			},
 	psy_armed = {weapon = "unstrapped",
+				weapon_slot = 2,
 				movement = move.stand,
 				mental = anim.free,
+				direction = look.cur_dir,
 				bodystate = move.standing,
 				animstate = nil,
 				animation = "psy_armed"
 			},
 	psy_shoot = {weapon = "fire",
-				weapon_slot = 1,
+				weapon_slot = 2,
 				movement = move.stand,
 				mental = anim.free,
+				direction = CSightParams.eSightTypeAnimationDirection,
 				bodystate = move.standing,
 				animstate = nil,
 				animation = "psy_shoot"
@@ -939,71 +972,12 @@ states = {
 		direction = look.cur_dir,
 		animstate = nil,
 		animation = "wounded_heavy_1"},
-
-
-	prone = {
-			weapon = "unstrapped",
-			movement = move.run,
-			mental = anim.danger,
-			bodystate = move.crouch,
-			animstate = nil,
-			animation = "prone"
-			},
-	prone_idle = {
-			weapon = "unstrapped",
-			movement = move.run,
-			mental = anim.danger,
-			bodystate = move.crouch,
-			animstate = nil,
-			animation = "prone_idle"
-			},
-	prone_fire = {
-			weapon = "fire",
-			movement = move.run,
-			mental = anim.danger,
-			bodystate = move.crouch,
-			animstate = nil,
-			animation = "prone_idle"
-			},
-	prone_sniper_fire = {
-			direction = look.fire_point,
-			weapon = "sniper_fire",
-			movement = move.run,
-			mental = anim.danger,
-			bodystate = move.crouch,
-			animstate = nil,
-			animation = "prone_idle"
-			},
 	climb = {	weapon = "strapped",
 				movement = move.walk,
 				mental = anim.free,
 				bodystate = move.standing,
 				animstate = nil,
 				animation = "climb"
-			},
-	minigunner = {	weapon = "none",
-				movement = move.stand,
-				mental = anim.free,
-				bodystate = move.standing,
-				animstate = nil,
-				animation = "minigunner"
-			},
-	barricade = {
-			weapon = "unstrapped",
-			movement = move.stand,
-			mental = anim.danger,
-			bodystate = move.crouch,
-			animstate = nil,
-			animation = "barricade"
-			},
-	barricade_look = {
-			weapon = "unstrapped",
-			movement = move.run,
-			mental = anim.danger,
-			bodystate = move.crouch,
-			direction = CSightParams.eSightTypeAnimationDirection,
-			animstate = nil,
-			animation = "barricade_look"
 			},
 	oso_flying = {	
 				weapon = "none",

@@ -120,14 +120,13 @@ function Crelease_body:clear(all,dist)
 	local pos = db.actor:position()
 	dist = dist or MIN_RELEASE_DISTANCE
 
-	local cls
 	for id, v in pairs(self.release_objects_table) do
 		if (all == nil and self.size < BODY_MAX_COUNT) then
 			return
 		end
 
 		local se_obj = id and id ~= 0 and id ~= 65535 and sim:object(id)
-		cls = se_obj and se_obj:clsid()
+		local cls = se_obj and se_obj:clsid() or nil
 		if (cls) and (IsStalker(nil,cls) or IsMonster(nil,cls)) and not (se_obj:alive()) then
 			if (all) then
 				--sim:release(se_obj,true)
