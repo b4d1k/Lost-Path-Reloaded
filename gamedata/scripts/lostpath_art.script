@@ -1,5 +1,5 @@
  --[[ -----------------------------------
- #  ĞĞµĞ¸Ğ·Ğ²ĞµÑÑ‚Ğ½Ñ‹Ğ¹ ÑĞºÑ€Ğ¸Ğ¿Ñ‚
+ #  Íåèçâåñòíûé ñêğèïò
  #  for Lost Path
  #  author : b4d1k
  #  date   : 11.11.2017
@@ -51,8 +51,8 @@ function actor_item_to_belt(obj)
 	obj:set_af_rank(0)
 	obj:set_af_cost(100000)
 	obj:set_af_inv_weight(0.01)
-	obj:set_inv_x(math.random(1,10))
-	obj:set_inv_y(math.random(1,2))
+	--obj:set_inv_x(math.random(1,10))
+	--obj:set_inv_y(math.random(1,2))
 	
 	obj:set_art_radiation(delta(math.random(0.0000001, 0.125))) 
 	obj:set_art_telepation(delta(math.random(0.0000001, 0.125))) 
@@ -64,9 +64,9 @@ function actor_item_to_belt(obj)
 	obj:set_art_chemistry(delta(math.random(0.0000001, 0.125))) 
 	obj:set_art_explosion(delta(math.random(0.0000001, 0.125))) 
 	
-	obj:set_name("ĞĞ Ğ¢Ğ•Ğ¤ĞĞšĞ¢ #"..obj:id())
-	obj:set_name_short("ĞĞ Ğ¢Ğ•Ğ¤ĞĞšĞ¢ #"..obj:id())
-	obj:set_descr("ĞĞµĞ¸Ğ·Ğ²ĞµÑÑ‚Ğ½Ñ‹Ğ¹ Ğ°Ñ€Ñ‚ĞµÑ„Ğ°ĞºÑ‚ ZZZ") -- ]] --
+	obj:set_name("ÀĞÒÅÔÀÊÒ #"..obj:id())
+	obj:set_name_short("ÀĞÒÅÔÀÊÒ #"..obj:id())
+	obj:set_descr("Íåèçâåñòíûé àğòåôàêò ZZZ") -- ]] --
 	
 	printf("# health : %s", obj:get_artefact_health())
 	printf("# radiation : %s", obj:get_artefact_radiation())
@@ -79,7 +79,7 @@ function actor_item_to_belt(obj)
 	local gs = game.translate_string("st_"..obj:section().."_name")
 	if string.find(gs,obj:section()) then gs = game.translate_string(obj:section()) end
 	if gs == "af_rusty_sea" then gs = game.translate_string("af_rusty_sea_urchin") end
-	news_manager.send_tip(db.actor, "%c[255,255,160,0]Ğ˜Ğ·ÑƒÑ‡ĞµĞ½ Ğ°Ñ€Ñ‚ĞµÑ„Ğ°ĞºÑ‚ : %c[255,160,160,160]"..gs.." ["..obj:id().."]", nil, nil, nil, nil)
+	news_manager.send_tip(db.actor, "%c[255,255,160,0]Èçó÷åí àğòåôàêò : %c[255,160,160,160]"..gs.." ["..obj:id().."]", nil, nil, nil, nil)
 	xr_sound.set_sound_play(db.actor:id(), "pda_news")
 	arts[ids] = true
 end
